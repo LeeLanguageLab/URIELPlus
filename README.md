@@ -40,7 +40,7 @@ If you are interested for more information, check out our [full paper](https://a
 
 If you have any questions, you can open a [GitHub Issue](https://github.com/Lee-Language-Lab/URIELPlus/issues) or send us an [email](mailto:masonshipton25@gmail.com).
 
-Check out ExploRIEL, our online UI for URIEL+: https://uriel-leelab.streamlit.app/ 
+Contributors: [Aditya Khan](mailto:adityakhan@cs.toronto.edu), [Mason Shipton](mailto:masonshipton25@gmail.com), [York Hay Ng](mailto:york.ng@mail.utoronto.ca), [David Anugraha](mailto:anugraha@cs.toronto.edu), [Kaiyao Duan](mailto:davidduan04@gmail.com), [Phuong H. Hoang](mailto:fiona.hoang@mail.utoronto.ca), [Eric Khiu](mailto:erickhiu@umich.edu), [A. Seza Doğruöz](mailto:as.dogruoz@ugent.be), [En-Shiun Annie Lee](mailto:annie.lee@ontariotechu.ca)
 
 ## Contents
 
@@ -184,4 +184,5 @@ Python 3.10 or later. If you're working with the `MIDASpy` extra dependencies, v
 + Replace `{languages}`, `{language 1}`, and `{language 2}` with language codes (e.g., `"stan1293"`, `"hind1269"`).
 + Replace `{source}` with one database (e.g., `"WALS"`) or all databases (`'A'`).
 + Note: the default `{source}` is all databases.
+
 
