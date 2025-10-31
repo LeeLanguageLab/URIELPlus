@@ -97,7 +97,7 @@ Python 3.10 or later. If you're working with the `MIDASpy` extra dependencies, v
     ```python
     u.get_{vector_type}_{feature_type}_array()
     ```
-+ Replace `{vector_type}` with `phylogeny`, `typological`, or `geography`.
++ Replace `{vector_type}` with `phylogeny`, `typological`, `geography`, or `scriptural`.
 + Replace `{feature_type}` with `features`, `languages`, `data`, or `sources`.
 
 + Example:
@@ -132,8 +132,8 @@ Python 3.10 or later. If you're working with the `MIDASpy` extra dependencies, v
     u.import_csv({file_path}, {index})
     ```
 
-+ Replace `{database}` with `saphon`, `bdproto`, `grambank`, `apics`, or `ewave`.
-+ Replace `{databases}` with arguments `"UPDATED_SAPHON"`, `"BDPROTO"`, `"GRAMBANK"`, `"APICS"`, and/or `"EWAVE"` (e.g., `"UPDATED_SAPHON"`, `"BDPROTO"`, `"EWAVE"`).
++ Replace `{database}` with `saphon`, `bdproto`, `grambank`, `apics`, `ewave`, or `glottolog`.
++ Replace `{databases}` with arguments `"UPDATED_SAPHON"`, `"BDPROTO"`, `"GRAMBANK"`, `"APICS"`, `"EWAVE"`, and/or `"GLOTTOLOG"` (e.g., `"UPDATED_SAPHON"`, `"BDPROTO"`, `"EWAVE"`).
 + Replace `{index}` with `0` for genetic data, `1` for typological data, or `2` for geographic data.
 
 ## Imputation Examples
@@ -184,3 +184,4 @@ Python 3.10 or later. If you're working with the `MIDASpy` extra dependencies, v
 + Replace `{languages}`, `{language 1}`, and `{language 2}` with language codes (e.g., `"stan1293"`, `"hind1269"`).
 + Replace `{source}` with one database (e.g., `"WALS"`) or all databases (`'A'`).
 + Note: the default `{source}` is all databases.
+
