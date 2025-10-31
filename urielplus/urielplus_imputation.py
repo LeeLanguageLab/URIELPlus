@@ -2,6 +2,7 @@ import datetime
 import logging
 import os
 import sys
+import collections
 
 
 import contexttimer
@@ -11,7 +12,7 @@ from fancyimpute import SoftImpute
 from joblib import Parallel, delayed
 from sklearn.impute import KNNImputer, SimpleImputer
 from sklearn.metrics import (accuracy_score, f1_score, mean_absolute_error,
-                             mean_squared_error, precision_score, recall_score)
+                             root_mean_squared_error, precision_score, recall_score)
 from sklearn.model_selection import KFold, train_test_split
 
 
@@ -36,60 +37,93 @@ class URIELPlusImputation(BaseURIEL):
 
 
 
-    def aggregate(self):
+    def _geneticFill(self, parent_features, child_features):
+        fill_mask = (child_features == -1.0) & (parent_features > -1.0)
+        return np.where(fill_mask, parent_features, child_features)
+    
+    
+    def aggregate(self, idx=1):
         """
-            Computes the union or average of feature data across sources in URIEL+.
+            Computes the union or average of feature data across sources in URIEL+ and
+            optionally performs genetic imputation to fill missing values.
 
 
             The union operation takes the maximum value across sources for each feature and language combination.
             The average operation takes the average across sources for each feature and language combination.
 
+            If "self.fill_with_base_lang" is True, this method will then apply a genetic imputation strategy after aggregation. It employs 
+            (BFS) to recursively propagate known feature values from root languages down to all their descendants, 
+            filling missing data throughout the language family trees.
 
             If caching is enabled, creates an npz file with the union or average of feature data across sources in URIEL+.
+
+            Args:
+                idx (int): The index of the file (typological and features.npz, scriptural and script_features.npz).
         """
         if self.aggregation == 'U':
             logging.info("Creating union of data across sources....")
-            aggregated_data = np.max(self.data[1], axis=-1)
+            aggregated_data = np.max(self.data[idx], axis=-1)
             if self.cache:
-                self.sources[1] = ["UNION"]
-                file_name = "feature_union.npz"
+                self.sources[idx] = ["UNION"]
+                file_name = f"{self.files[idx].replace('.npz', '')}_union.npz"
         else:
-            logging.info("Creating average of data across sources....")
-            aggregated_data = np.where(self.data[1] == -1, np.nan, self.data[1])
+            logging.info(f"Creating average of data across sources for idx={idx}....")
+            aggregated_data = np.where(self.data[idx] == -1, np.nan, self.data[idx])
             aggregated_data = np.nanmean(aggregated_data, axis=-1)
             aggregated_data = np.where(np.isnan(aggregated_data), -1, aggregated_data)
+            aggregated_data = np.expand_dims(aggregated_data, axis=-1)
             if self.cache:
-                self.sources[1] = ["AVERAGE"]
-                file_name = "feature_average.npz"
+                self.sources[idx] = ["AVERAGE"]
+                file_name = f"{self.files[idx].replace('.npz', '')}_average.npz"
 
 
         if self.fill_with_base_lang:
+            logging.info("Executing new BFS-based genetic imputation strategy...")
             self.dialects = self.get_dialects()
-            for lang_idx in range(len(self.langs[1])):
-                for parent, child in self.dialects.items():
-                    if self.langs[1][lang_idx] in child:
-                        for feat_idx in range(len(self.feats[1])):
-                            parent_data = aggregated_data[parent][feat_idx]
-                            dataUnknown = (aggregated_data[lang_idx][feat_idx] == -1.0)
-                            parentDataKnown = parent_data > -1.0
-                            if dataUnknown and parentDataKnown:
-                                aggregated_data[lang_idx][feat_idx] = parent_data
+            if not self.dialects:
+                logging.warning("Dialect dictionary is empty. Skipping genetic imputation.")
+            else:
+                glottocode_to_idx = {lang: i for i, lang in enumerate(self.langs[idx])}
+                all_parent_indices = set(self.dialects.keys())
+                all_child_glottocodes = set()
+                for children_list in self.dialects.values():
+                    all_child_glottocodes.update(children_list)
+                all_child_indices = {glottocode_to_idx.get(gc) for gc in all_child_glottocodes}
+                all_child_indices.discard(None)
+                root_nodes = all_parent_indices - all_child_indices
+                logging.info(f"Found {len(root_nodes)} root languages for genetic imputation.")
+
+                for root_idx in root_nodes:
+                    queue = collections.deque([root_idx])
+                    visited = {root_idx}
+                    while queue:
+                        parent_idx = queue.popleft()
+                        if parent_idx in self.dialects:
+                            parent_features = aggregated_data[parent_idx]
+                            for child_glottocode in self.dialects[parent_idx]:
+                                child_idx = glottocode_to_idx.get(child_glottocode)
+                                if child_idx is not None and child_idx not in visited:
+                                    child_features = aggregated_data[child_idx]
+                                    updated_child_features = self._geneticFill(parent_features, child_features)
+                                    aggregated_data[child_idx] = updated_child_features
+                                    visited.add(child_idx)
+                                    queue.append(child_idx)
+                logging.info("Genetic imputation finished.")
        
-        aggregated_data = np.expand_dims(aggregated_data, axis=-1)
+        if self.aggregation == 'U':
+            aggregated_data = np.expand_dims(aggregated_data, axis=-1)
        
-        self.data[1] = aggregated_data
+        self.data[idx] = aggregated_data
 
 
         if self.cache:
-            np.savez(os.path.join(self.cur_dir, "database", file_name), feats=self.feats[1], data=self.data[1], langs=self.langs[1], sources=self.sources[1])
+            np.savez(os.path.join(self.cur_dir, "database", file_name),
+                    feats=self.feats[idx],
+                    data=self.data[idx],
+                    langs=self.langs[idx],
+                    sources=self.sources[idx])
 
-
-        if self.aggregation == 'U':
-            logging.info("Union across sources creation complete.")
-        else:
-            logging.info("Average across sources creation complete.")
-
-
+        logging.info(f"Aggregation complete for idx={idx}.")
         return aggregated_data
 
 
@@ -242,7 +276,7 @@ class URIELPlusImputation(BaseURIEL):
 
 
         elif self.aggregation == 'A':
-            rmse = mean_squared_error(orig, imputed, squared=False)
+            rmse = root_mean_squared_error(orig, imputed)
             mae = mean_absolute_error(orig, imputed)
 
 
@@ -309,7 +343,7 @@ class URIELPlusImputation(BaseURIEL):
             else:
                 try:
                     if orig and imputed:  # Check if there are values to evaluate
-                        rmse = mean_squared_error(orig, imputed, squared=False)
+                        rmse = root_mean_squared_error(orig, imputed)
                         mae = mean_absolute_error(orig, imputed)
 
 
@@ -731,40 +765,46 @@ class URIELPlusImputation(BaseURIEL):
         return data_in, bin_vars
 
 
-    def _make_csv(self, file_path_to_save_npz):
+    def _make_csv(self, file_path_to_save_npz, file="features.npz"):
         """
             Generates a CSV file from the URIEL+ features dataset.
 
 
             Args:
                 file_path_to_save_npz (str): The path to save the NPZ file.
+                file (str): The file to make a csv of.
 
 
             Returns:
                 pd.DataFrame: The generated data frame.
         """
-        if ["imputed"] not in self.sources[1] and self.cache:
-            updated_path = os.path.join(file_path_to_save_npz, "non_imputed_data")
-            # check if the directory exists
-            if not os.path.exists(updated_path):
-                os.makedirs(updated_path)
-            np.savez(os.path.join(updated_path, self.files[1]), data=self.data[1], feats=self.feats[1], langs=self.langs[1], sources=self.sources[1])
-
-
-        aggregate_data = self.aggregate()
-
-
-        if self.aggregation == 'U':
-            combined_df_u_no_ffg = pd.DataFrame(aggregate_data.squeeze(), columns=self.feats[1])
-            combined_df_u_no_ffg.insert(0, "language", self.langs[1])
-            return combined_df_u_no_ffg
+        if file == "features.npz":
+            idx = 1
+        elif file == "script_features.npz":
+            idx = 3
         else:
-            combined_df_a_no_ffg = pd.DataFrame(aggregate_data.squeeze(), columns=self.feats[1])
-            combined_df_a_no_ffg.insert(0, "language", self.langs[1])
-            return combined_df_a_no_ffg
+            raise ValueError(f"Unknown file: {file}")
 
 
-    def imputation_interface(self, csv_path=None, strategy="softimpute", file_path_to_save_npz=None,
+        if ["imputed"] not in self.sources[idx] and self.cache:
+            updated_path = os.path.join(file_path_to_save_npz, "non_imputed_data")
+            os.makedirs(updated_path, exist_ok=True)
+            np.savez(os.path.join(updated_path, self.files[idx]),
+                    data=self.data[idx],
+                    feats=self.feats[idx],
+                    langs=self.langs[idx],
+                    sources=self.sources[idx])
+        
+
+        aggregate_data = self.aggregate(idx)
+
+
+        combined_df = pd.DataFrame(aggregate_data.squeeze(), columns=self.feats[idx])
+        combined_df.insert(0, "language", self.langs[idx])
+        return combined_df
+
+
+    def imputation_interface(self, csv_path=None, strategy="softimpute", file_path_to_save_npz=None, file="features.npz",
                          feature_prefixes=("S_", "P_", "INV_", "M_"),
                          eval_metric="f1", hyperparameter_range=None,
                          test_quality=True, return_csv=True, save_as_npz=True):
@@ -804,16 +844,16 @@ class URIELPlusImputation(BaseURIEL):
 
 
         if csv_path is None:
-            combined_df_u = self._make_csv(file_path_to_save_npz)
+            combined_df_u = self._make_csv(file_path_to_save_npz, file=file)
         else:
             combined_df_u = pd.read_csv(csv_path)
-            updated_path = os.path.join(file_path_to_save_npz, "features.npz")
+            updated_path = os.path.join(file_path_to_save_npz, file)
             f = np.load(updated_path, allow_pickle=True)
             f = dict(f)
             f_sources = f["sources"]
             if ["imputed"] not in f_sources and self.cache:
                 updated_path = os.path.join(file_path_to_save_npz, "non_imputed_data")
-                np.savez(os.path.join(updated_path, "features.npz"), data=f["data"], feats=f["feats"], langs=f["langs"], sources=f_sources)
+                np.savez(os.path.join(updated_path, file), data=f["data"], feats=f["feats"], langs=f["langs"], sources=f_sources)
 
 
         old_combined_df_u = combined_df_u.copy()
@@ -879,10 +919,9 @@ class URIELPlusImputation(BaseURIEL):
             reshaped_data = data.reshape(data.shape[0], data.shape[1], 1)
             f_sources_new = np.array(["imputed"])
             #IMPORTANT
-            file_path = os.path.join(file_path_to_save_npz, self.files[1])
-
-
-            self.data[1] = reshaped_data
+            idx = 1 if file == "features.npz" else 3
+            file_path = os.path.join(file_path_to_save_npz, self.files[idx])
+            self.data[idx] = reshaped_data
 
 
             if self.cache:
@@ -910,6 +949,8 @@ class URIELPlusImputation(BaseURIEL):
             eval_metric = "rmse"
         _ = self.imputation_interface(strategy="midas", save_as_npz=False, test_quality=True, eval_metric=eval_metric)
         _ = self.imputation_interface(strategy="midas", save_as_npz=True, test_quality=False, eval_metric=eval_metric)
+        _ = self.imputation_interface(strategy="midas", file="script_features.npz", feature_prefixes=("SC_",), save_as_npz=False, test_quality=True, eval_metric=eval_metric)
+        _ = self.imputation_interface(strategy="midas", file="script_features.npz", feature_prefixes=("SC_",), save_as_npz=True, test_quality=False, eval_metric=eval_metric)
 
 
     def knn_imputation(self):
@@ -919,7 +960,8 @@ class URIELPlusImputation(BaseURIEL):
         else:
             eval_metric = "rmse"
         _ = self.imputation_interface(strategy="knn", save_as_npz=True, test_quality=True, eval_metric=eval_metric, hyperparameter_range=(3, 6, 9, 12, 15))
-
+        _ = self.imputation_interface(strategy="knn", file="script_features.npz", feature_prefixes=("SC_",), save_as_npz=False, test_quality=True, eval_metric=eval_metric)
+        _ = self.imputation_interface(strategy="knn", file="script_features.npz", feature_prefixes=("SC_",), save_as_npz=True, test_quality=False, eval_metric=eval_metric)
 
 
 
@@ -929,8 +971,10 @@ class URIELPlusImputation(BaseURIEL):
             eval_metric = "f1"
         else:
             eval_metric = "rmse"
-        _ = self.imputation_interface(strategy="softimpute", save_as_npz=False, test_quality=True, eval_metric=eval_metric)
-        _ = self.imputation_interface(strategy="softimpute", save_as_npz=True, test_quality=False, eval_metric=eval_metric)
+        _ = self.imputation_interface(strategy="softimpute", file="features.npz", feature_prefixes=("S_", "P_", "INV_", "M_"), save_as_npz=False, test_quality=True, eval_metric=eval_metric)
+        _ = self.imputation_interface(strategy="softimpute", file="features.npz", feature_prefixes=("S_", "P_", "INV_", "M_"), save_as_npz=True, test_quality=False, eval_metric=eval_metric)
+        _ = self.imputation_interface(strategy="softimpute", file="script_features.npz", feature_prefixes=("SC_",), save_as_npz=False, test_quality=True, eval_metric=eval_metric)
+        _ = self.imputation_interface(strategy="softimpute", file="script_features.npz", feature_prefixes=("SC_",), save_as_npz=True, test_quality=False, eval_metric=eval_metric)
 
 
     def mean_imputation(self):
@@ -941,3 +985,5 @@ class URIELPlusImputation(BaseURIEL):
             eval_metric = "rmse"
         _ = self.imputation_interface(strategy="mean", save_as_npz=False, test_quality=True, eval_metric=eval_metric)
         _ = self.imputation_interface(strategy="mean", save_as_npz=True, test_quality=False, eval_metric=eval_metric)
+        _ = self.imputation_interface(strategy="mean", file="script_features.npz", feature_prefixes=("SC_",), save_as_npz=False, test_quality=True, eval_metric=eval_metric)
+        _ = self.imputation_interface(strategy="mean", file="script_features.npz", feature_prefixes=("SC_",), save_as_npz=True, test_quality=False, eval_metric=eval_metric)

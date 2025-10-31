@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -10,11 +11,6 @@ import pandas as pd
 
 
 from .base_uriel import BaseURIEL
-from .database.urielplus_csvs.resource_level_langs import (
-    high_resource_languages_URIELPlus,
-    medium_resource_languages_URIELPlus,
-    low_resource_languages_URIELPlus,
-)
 
 
 class URIELPlusQuerying(BaseURIEL):
@@ -25,10 +21,10 @@ class URIELPlusQuerying(BaseURIEL):
 
 
             Args:
-                feats (np.ndarray): The features of the three loaded features.
-                langs (np.ndarray): The languages of the three loaded features.
-                data (np.ndarray): The data of the three loaded features.
-                sources (np.ndarray): The sources of the three loaded features.
+                feats (np.ndarray): The features of the four loaded features.
+                langs (np.ndarray): The languages of the four loaded features.
+                data (np.ndarray): The data of the four loaded features.
+                sources (np.ndarray): The sources of the four loaded features.
         """
         super().__init__(feats, langs, data, sources)
 
@@ -57,7 +53,8 @@ class URIELPlusQuerying(BaseURIEL):
         "phonological": 1,
         "inventory": 1,
         "featural": 1,
-        "morphological": 1}
+        "morphological": 1,
+        "scriptural": 3,}
         if distance in d.keys():
             return d[distance]
         logging.error(f"{distance} is not an available feature category in URIEL+. Feature categories are {list(d.keys())}.")
@@ -112,7 +109,7 @@ class URIELPlusQuerying(BaseURIEL):
         return available_languages
    
     """
-        The next seven functions are used to retrieve a list of languages that contain at least one non-empty feature
+        The next eight functions are used to retrieve a list of languages that contain at least one non-empty feature
         of the specified distance type.
 
 
@@ -145,6 +142,9 @@ class URIELPlusQuerying(BaseURIEL):
 
     def get_languages_with_syntactic_data(self):
         return self.get_languages_with_distance_data("syntactic")
+    
+    def get_languages_with_scriptural_data(self):
+        return self.get_languages_with_distance_data("scriptural")
 
 
 
@@ -166,6 +166,9 @@ class URIELPlusQuerying(BaseURIEL):
             Logging:
                 Error: Logs error if only one language is provided or if the language is unknown.
         """
+        if len(args) == 1 and not isinstance(args[0],list):
+            logging.error("You only provided one language argument.\nProvide multiple language arguments, or a single list of languages as arguments.")
+            sys.exit(1)
         if len(args) == 1 and isinstance(args[0],list):
             langs = args[0]
         else:
@@ -180,9 +183,9 @@ class URIELPlusQuerying(BaseURIEL):
                 logging.error(f"Unknown language: {lang}.")
                 sys.exit(1)
 
+
         vectors = {}
-        for lang in range(len(langs)):
-            lang_idx = np.where(self.langs[loaded_features_idx] == langs[lang])[0][0]
+        for lang_idx in range(len(langs)):
             vector = []
             for feat_idx in range(len(self.feats[loaded_features_idx])):
                 featIsMorphological = ((self.feats[loaded_features_idx][feat_idx]).startswith("M_"))
@@ -190,7 +193,7 @@ class URIELPlusQuerying(BaseURIEL):
                 featIsPhonological = ((self.feats[loaded_features_idx][feat_idx]).startswith("P_"))
                 featIsSyntactic = ((self.feats[loaded_features_idx][feat_idx]).startswith("S_"))
                 if category in ["genetic", "featural", "geographic"] or (category == "morphological" and featIsMorphological) or (category == "inventory" and featIsInventory) or (category == "phonological" and featIsPhonological) or (category == "syntactic" and featIsSyntactic):
-                    feat_data = self.data[loaded_features_idx][lang_idx][feat_idx]
+                    feat_data = self.data[loaded_features_idx][feat_idx]
                     if len(feat_data) == 1:
                         vector.extend(feat_data)
                     elif self.aggregation == 'U':
@@ -201,11 +204,11 @@ class URIELPlusQuerying(BaseURIEL):
                         else:
                             known_data = feat_data[feat_data != -1.0]
                             vector.append(np.mean(known_data) if known_data.size > 0 else 0.0)
-            vectors[langs[lang]] = vector
+            vectors[langs[lang_idx]] = vector
         return vectors
    
     """
-        The next seven functions are used to retrieve the vectors of the specified category for each language.
+        The next eight functions are used to retrieve the vectors of the specified category for each language.
 
 
         Returns:
@@ -237,6 +240,9 @@ class URIELPlusQuerying(BaseURIEL):
 
     def get_syntactic_vector(self, *args):
         return self.get_vector("syntactic", *args)
+    
+    def get_scriptural_vector(self, *args):
+        return self.get_vector("scriptural", *args)
    
 
 
@@ -420,7 +426,7 @@ class URIELPlusQuerying(BaseURIEL):
 
 
                 indices_with_values = [
-                    feat_index for feat_index, feat in enumerate(self.feats[loaded_features_idx]) if (dist in ["genetic", "featural", "geographic"] or
+                    feat_index for feat_index, feat in enumerate(self.feats[loaded_features_idx]) if (dist in ["genetic", "featural", "geographic", "scriptural"] or
                                                                 (dist == "morphological" and feat.startswith("M_")) or
                                                                 (dist == "inventory" and feat.startswith("INV_")) or
                                                                 (dist == "phonological" and feat.startswith("P_")) or
@@ -521,7 +527,7 @@ class URIELPlusQuerying(BaseURIEL):
         return angular_distances_list
    
     """
-        The next seven functions are used to compute specific distances between languages.
+        The next eight functions are used to compute specific distances between languages.
 
 
         Args:
@@ -557,6 +563,9 @@ class URIELPlusQuerying(BaseURIEL):
 
     def new_syntactic_distance(self, *args):
         return self.new_distance("syntactic", *args)
+    
+    def new_scriptural_distance(self, *args):
+        return self.new_distance("scriptural", *args)
    
 
 
@@ -893,6 +902,12 @@ class URIELPlusQuerying(BaseURIEL):
 
 
        
+    def _load_resource_lists(self):
+        json_path = os.path.join(self.cur_dir, "database", "urielplus_csvs", "resource_languages.json")
+        with open(json_path, encoding='utf-8') as f:
+            return json.load(f)
+        
+    
     def feature_coverage(self, resource_level, distance_type):
         """
             Prints the number of languages with available data in URIEL+ for the provided resoure-level and distance type.
@@ -903,7 +918,7 @@ class URIELPlusQuerying(BaseURIEL):
                 high-resource, medium-resource, and low-resource.
 
 
-                distance_type (str): The type of distance (featural, syntactic, phonological, inventory, or morphological).
+                distance_type (str): The type of distance (featural, syntactic, phonological, inventory, morphological, etc.).
 
 
             Returns:
@@ -912,10 +927,11 @@ class URIELPlusQuerying(BaseURIEL):
         if not self.codes == "Glotto":
             logging.error("Cannot retrieve feature coverage if languages in URIEL+ are not all of Glottocode language representation.")
             sys.exit(1)
+        resource_map = self._load_resource_lists()
         r_map = {
-            "high-resource": high_resource_languages_URIELPlus,
-            "medium-resource": medium_resource_languages_URIELPlus,
-            "low-resource": low_resource_languages_URIELPlus,
+            "high-resource": resource_map["high-resource"],
+            "medium-resource": resource_map["medium-resource"],
+            "low-resource": resource_map["low-resource"],
         }
         if resource_level in r_map:
             resource_level_languages = r_map[resource_level]
@@ -934,32 +950,23 @@ class URIELPlusQuerying(BaseURIEL):
 
     def all_feature_coverage(self):
         """
-            Prints the number of languages with available data in URIEL+ for all resoure-levels and distance types.
+            Prints the number of languages with available data in URIEL+ for all resource levels and distance types.
         """
         if not self.codes == "Glotto":
             logging.error("Cannot retrieve feature coverage if languages in URIEL+ are not all of Glottocode language representation.")
             sys.exit(1)
-        for distance_type in ["genetic", "geographic", "featural", "syntactic", "phonological", "inventory", "morphological"]:
+
+        resource_map = self._load_resource_lists()
+
+        for distance_type in [
+            "genetic", "geographic", "featural", "syntactic", "phonological",
+            "inventory", "morphological", "scriptural"
+        ]:
             distance_languages = self.get_languages_with_distance_data(distance_type)
-            languages_with_data = 0
-            for lang in high_resource_languages_URIELPlus:
-                if lang in distance_languages:
-                    languages_with_data += 1
-            logging.info(f"Number of high-resource languages with available {distance_type} data: {languages_with_data}.")
 
-
-            languages_with_data = 0
-            for lang in medium_resource_languages_URIELPlus:
-                if lang in distance_languages:
-                    languages_with_data += 1
-            logging.info(f"Number of medium-resource languages with available {distance_type} data: {languages_with_data}.")
-
-
-            languages_with_data = 0
-            for lang in low_resource_languages_URIELPlus:
-                if lang in distance_languages:
-                    languages_with_data += 1
-            logging.info(f"Number of low-resource languages with available {distance_type} data: {languages_with_data}.")
+            for level in ["high-resource", "medium-resource", "low-resource"]:
+                languages_with_data = sum(lang in distance_languages for lang in resource_map[level])
+                logging.info(f"Number of {level} languages with available {distance_type} data: {languages_with_data}.")
 
 
    
@@ -1094,7 +1101,7 @@ class URIELPlusQuerying(BaseURIEL):
 
     def non_featural_confidence_score(self, lang1, lang2, distance_type):
         """
-            Computes the confidence score for non-featural distances between two languages (genetic or geographic).
+            Computes the confidence score for non-featural distances between two languages (genetic, geographic, or scriptural).
 
 
             Args:
@@ -1106,7 +1113,7 @@ class URIELPlusQuerying(BaseURIEL):
             Returns:
                 float: The computed confidence scores.
         """
-        assert distance_type in ["genetic", "geographic"]
+        assert distance_type in ["genetic", "geographic", "scriptural"]
         def check_agreement(lang, distance_type):
             loaded_features_idx = self.map_new_distance_to_loaded_features(distance_type)
             lang_index = np.where(self.langs[loaded_features_idx] == lang)[0][0]
@@ -1172,16 +1179,16 @@ class URIELPlusQuerying(BaseURIEL):
             Args:
                 lang1 (str): The first language code.
                 lang2 (str): The second language code.
-                distance_type (str): The type of distance (featural, syntactic, phonological, inventory, morphological, genetic, or geographic).
+                distance_type (str): The type of distance (featural, syntactic, phonological, inventory, morphological, genetic, geographic, or scriptural).
 
 
             Returns:
                 float: The computed confidence scores.
         """
-        distance_types = ["genetic", "geographic", "featural", "syntactic", "phonological", "inventory", "morphological"]
+        distance_types = ["genetic", "geographic", "featural", "syntactic", "phonological", "inventory", "morphological", "scriptural"]
         if distance_type in ["featural", "syntactic", "phonological", "inventory", "morphological"]:
             return self.featural_confidence_score(lang1, lang2, distance_type)
-        elif distance_type in ["genetic", "geographic"]:
+        elif distance_type in ["genetic", "geographic", "scriptural"]:
             return self.non_featural_confidence_score(lang1, lang2, distance_type)
         else:
             logging.error(f"{distance_type} is not an available distance type in URIEL+. Distance types are {distance_types}.")

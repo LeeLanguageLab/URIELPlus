@@ -99,7 +99,9 @@ class URIELPlusDatabases(BaseURIEL):
             Logging:
                 Error: Logs if the database is already integrated.
         """
-        if any(database in source for source in self.sources[1]):
+        all_sources = [str(s).upper() for s in self.sources[1]]
+
+        if any(database.upper() in s for s in all_sources) or "GLOTTOLOG" in all_sources:
             logging.error(f"{database} database already integrated.")
             sys.exit(1)
 
@@ -150,9 +152,9 @@ class URIELPlusDatabases(BaseURIEL):
 
     def _calculate_geocoord_vectors(self):
         """
-            This function calculates the geographic distances between new languages and geocoordinates, creating
-            geography vectors.
-
+            This function calculates geographic distance vectors between new languages and existing geocoordinates.
+            Each new language gets a vector of normalized distances to all known coordinates (in km).
+            Uses the provided getGreatCircleDistance function for great-circle distance.
 
             If caching is enabled, updates the `geocoord_features.npz` file.
         """
@@ -160,31 +162,100 @@ class URIELPlusDatabases(BaseURIEL):
         self.langs[2] = np.append(self.langs[2], new_langs)
         self.data[2] = self._set_new_data_dimensions(self.data[2], [], new_langs, [])
 
+        coords = [list(map(float, re.findall(r"-?\d+(?:\.\d+)?", feat))) for feat in self.feats[2]]
 
-        coords = [list(map(int, re.findall(r"-?\d+", feat))) for feat in self.feats[2]]
         csv_path = os.path.join(self.cur_dir, "database", "urielplus_csvs", "lang_fam_geo.csv")
         fam_geo_feat_csv = pd.read_csv(csv_path)
+        fam_geo_feat_csv.columns = fam_geo_feat_csv.columns.str.strip('"')
+        fam_geo_feat_csv["lat"] = pd.to_numeric(fam_geo_feat_csv["lat"], errors="coerce")
+        fam_geo_feat_csv["lon"] = pd.to_numeric(fam_geo_feat_csv["lon"], errors="coerce")
+        fam_geo_feat_csv["lon"] = fam_geo_feat_csv["lon"].apply(
+            lambda x: x - 360 if x > 180 else (x + 360 if x < -180 else x)
+        )
+        fam_geo_feat_csv["lat"] = fam_geo_feat_csv["lat"].apply(lambda x: max(min(x, 90), -90))
 
+        # Function provided by Dr. Patrick Littell
+        def getGreatCircleDistance(lat1, lon1, lat2, lon2):
+            ''' Get the great-circle distance between two coordinates
+                using the Haversine calculation '''
+
+            f1 = math.radians(lat1)
+            f2 = math.radians(lat2)
+            df = math.radians(lat2-lat1)
+            dl = math.radians(lon2-lon1)
+
+            a = (math.sin(df/2) ** 2 +
+                    math.cos(f1) * math.cos(f2) *
+                    math.sin(dl/2) ** 2)
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+            return 6371.000 * c
 
         for i, l in enumerate(new_langs):
-            lat = fam_geo_feat_csv.loc[fam_geo_feat_csv["code"] == l, "lat"]
-            lon = fam_geo_feat_csv.loc[fam_geo_feat_csv["code"] == l, "lon"]
-            lat, lon = lat.values[0], lon.values[0]
+            try:
+                row = fam_geo_feat_csv.loc[fam_geo_feat_csv["code"].str.strip('"') == l]
+                if row.empty:
+                    self.data[2][-len(new_langs) + i, :, -1] = np.nan
+                    continue
 
+                lat, lon = row["lat"].values[0], row["lon"].values[0]
+                if pd.isna(lat) or pd.isna(lon):
+                    self.data[2][-len(new_langs) + i, :, -1] = np.nan
+                    continue
 
-            #Language does not have a known location spoken.
-            if math.isnan(lat) or math.isnan(lon):
-                self.data[2][self.data[2].shape[0] - len(new_langs) + i, :, -1] = -1.0
-                continue
+                distances = []
+                for c in coords:
+                    if np.isnan(c[0]) or np.isnan(c[1]):
+                        distances.append(np.nan)
+                    else:
+                        distances.append(getGreatCircleDistance(lat, lon, c[0], c[1]))
 
+                distances_array = np.array(distances, dtype=np.float32)
+                max_dist = np.nanmax(distances_array)
+                min_dist = np.nanmin(distances_array)
+                if max_dist == min_dist:
+                    norm_distances = np.zeros_like(distances_array)
+                else:
+                    norm_distances = (distances_array - min_dist) / (max_dist - min_dist)
 
-            distances = [math.dist([lat, lon], coord) for coord in coords]
-            min_index = np.argmin(distances)
-            self.data[2][self.data[2].shape[0] - len(new_langs) + i, min_index, -1] = 1.0
+                self.data[2][-len(new_langs) + i, :, -1] = norm_distances
 
+            except Exception:
+                self.data[2][-len(new_langs) + i, :, -1] = np.nan
 
         if self.cache:
             np.savez(os.path.join(self.cur_dir, "database", self.files[2]), feats=self.feats[2], data=self.data[2], langs=self.langs[2], sources=self.sources[2])
+
+
+    def _calculate_scriptural_vectors(self):
+        """
+            This function calculates scriptural vectors for new languages.
+
+            If caching is enabled, updates the `script_features.npz` file.
+        """
+        new_langs = np.setdiff1d(self.langs[1], self.langs[3])
+        self.langs[3] = np.append(self.langs[3], new_langs)
+        self.data[3] = self._set_new_data_dimensions(self.data[3], [], new_langs, [])
+
+        csv_path = os.path.join(self.cur_dir, "database", "urielplus_csvs", "script_data.csv")
+        script_csv = pd.read_csv(csv_path)
+        script_csv.columns = script_csv.columns.str.strip('"')
+        script_csv['code'] = script_csv['code'].str.strip('"') 
+
+        script_feat_cols = [col for col in script_csv.columns if col not in ['code', 'name']]
+
+        for i, lang in enumerate(new_langs):
+            lang_row = script_csv.loc[script_csv['code'] == lang]
+
+            if lang_row.empty:
+                self.data[3][-len(new_langs) + i, :, -1] = -1.0
+            else:
+                features = lang_row[script_feat_cols].values.astype(np.float32)
+                if features.ndim == 1:
+                    features = features.reshape(1, -1, 1)
+                self.data[3][-len(new_langs) + i, :, -1] = features
+    
+        if self.cache:
+            np.savez(os.path.join(self.cur_dir, "database", self.files[3]), feats=self.feats[3], data=self.data[3], langs=self.langs[3], sources=self.sources[3])
 
 
     def combine_features(self, secondary_source, feature_sets):
@@ -297,7 +368,6 @@ class URIELPlusDatabases(BaseURIEL):
                     feat_index = np.where(self.feats[1] == feat)
                     self.data[1][lang_index, feat_index, source_index] = saphon_data[feat][i]
 
-
         self.sources[1][source_index] = "UPDATED_SAPHON"
 
 
@@ -359,10 +429,11 @@ class URIELPlusDatabases(BaseURIEL):
         if self.cache:
             np.savez(os.path.join(self.cur_dir, "database", self.files[1]),
                      feats=self.feats[1], data=self.data[1], langs=self.langs[1], sources=self.sources[1])
-
+            
 
         self._calculate_phylogeny_vectors()
         self._calculate_geocoord_vectors()
+        self._calculate_scriptural_vectors()
 
 
         logging.info("BDPROTO integration complete.")
@@ -423,10 +494,11 @@ class URIELPlusDatabases(BaseURIEL):
         if self.cache:
             np.savez(os.path.join(self.cur_dir, "database", self.files[1]),
                      feats=self.feats[1], data=self.data[1], langs=self.langs[1], sources=self.sources[1])
-
+            
 
         self._calculate_phylogeny_vectors()
         self._calculate_geocoord_vectors()
+        self._calculate_scriptural_vectors()
 
 
         self.combine_features("GRAMBANK", _ug)
@@ -503,6 +575,7 @@ class URIELPlusDatabases(BaseURIEL):
 
         self._calculate_phylogeny_vectors()
         self._calculate_geocoord_vectors()
+        self._calculate_scriptural_vectors()
 
 
         self.combine_features("APICS", _uai)
@@ -569,6 +642,8 @@ class URIELPlusDatabases(BaseURIEL):
 
         self._calculate_phylogeny_vectors()
         self._calculate_geocoord_vectors()
+        self._calculate_scriptural_vectors()
+
 
         self.combine_features("EWAVE", _ue)
 
@@ -576,6 +651,61 @@ class URIELPlusDatabases(BaseURIEL):
         logging.info("eWAVE integration complete.")
 
 
+    def integrate_glottolog(self):
+        """
+            Updates URIEL+ with data from the Glottolog database.
+
+
+            This function integrates the Glottolog data.
+
+
+            Args:
+                convert_glottocodes_param (bool): If True, converts language codes to Glottocodes.
+        """
+        self.is_database_incorporated("GLOTTOLOG")
+
+
+        logging.info("Importing Glottolog from \"dialects.csv\"....")
+
+
+        if self.codes == "Iso":
+            self.set_glottocodes()
+        
+
+        glottolog_data = pd.read_csv(os.path.join(self.cur_dir, "database", "urielplus_csvs", "dialects.csv"))
+
+
+        code_cols = ['Language Glot', 'Dialect(s) Glot']
+
+
+        new_langs = set()
+
+        for col in code_cols:
+            for entry in glottolog_data[col].dropna():
+                parts = [code.strip() for code in entry.split(',') if code.strip()]
+                new_langs.update(parts)
+
+        existing_langs = set(self.langs[1]) if len(self.langs) > 1 else set()
+        new_langs = sorted(new_langs - existing_langs)
+
+
+        self.data[1] = self._set_new_data_dimensions(self.data[1], [], new_langs, [])
+        self.langs[1] = np.append(self.langs[1], np.array(new_langs).flatten())
+        
+
+        if self.cache:
+            np.savez(os.path.join(self.cur_dir, "database", self.files[1]),
+                     feats=self.feats[1], data=self.data[1], langs=self.langs[1], sources=self.sources[1])
+
+
+        self._calculate_phylogeny_vectors()
+        self._calculate_geocoord_vectors()
+        self._calculate_scriptural_vectors()
+
+
+        logging.info("Glottolog integration complete.")
+
+    
     def integrate_databases(self):
         """
             Updates URIEL+ with data from all available databases (UPDATED_SAPHON, BDPROTO, GRAMBANK, APICS, EWAVE).
@@ -588,13 +718,13 @@ class URIELPlusDatabases(BaseURIEL):
             "BDPROTO": self.integrate_bdproto,
             "GRAMBANK": self.integrate_grambank,
             "APICS": self.integrate_apics,
-            "EWAVE": self.integrate_ewave
+            "EWAVE": self.integrate_ewave,
+            "GLOTTOLOG": self.integrate_glottolog
         }
        
         for db, integrate_method in databases.items():
             if db not in self.sources[1]:
                 integrate_method()
-
 
         self.inferred_features()
 
@@ -629,7 +759,8 @@ class URIELPlusDatabases(BaseURIEL):
             "GRAMBANK": self.integrate_grambank,
             "APICS": self.integrate_apics,
             "EWAVE": self.integrate_ewave,
-            "INFERRED": self.inferred_features
+            "GLOTTOLOG": self.integrate_glottolog,
+            "INFERRED": self.inferred_features,
         }
 
 
@@ -643,45 +774,3 @@ class URIELPlusDatabases(BaseURIEL):
                 sys.exit(1)
            
         logging.info("Custom databases integration complete.")
-
-    def import_csv(self, file_path, idx=1):
-        """
-            Imports data from a CSV file path. This will replace all existing data in the specified index.
-
-
-            Args:
-                file_path (str): The path to the .csv file containing URIEL+ data.
-                idx (int): The index of the data array to import into. 0 = genetic, 1 = typological, 2 = geographic.
-
-
-            Logging:
-                Error: Logs an error if the file does not exist or is not valid.
-        """
-        logging.info(f"Importing URIEL+ data from {file_path}...")
-        if not os.path.exists(file_path):
-            logging.error(f"File {file_path} does not exist.")
-            sys.exit(1)
-        if not self.data[idx].ndim == 3:
-            logging.error("Data array is not 3-dimensional.")
-            sys.exit(1)
-        if not self.data[idx].shape[-1] == 1:
-            logging.info('Caution: Data array currently contains > 1 source dimension, all of which will be lost.')
-
-        try:
-            df = pd.read_csv(file_path, index_col=0)
-        except Exception as e:
-            logging.error(f"Error importing URIEL+ data from {file_path}: {e}")
-            sys.exit(1)
-
-        if self.codes == 'Iso' and any(not self.is_iso_code(lang) for lang in df.index):
-            logging.error('Language codes in the CSV file are not all in ISO 639-3 format.')
-            sys.exit(1)
-        if self.codes == 'Glotto' and any(not self.is_glottocode(lang) for lang in df.index):
-            logging.error('Language codes in the CSV file are not all in Glottocode format.')
-            sys.exit(1)
-
-        self.feats[idx] = df.columns.to_numpy()
-        self.langs[idx] = df.index.to_numpy()
-        self.data[idx] = df.values
-        self.data[idx] = np.expand_dims(self.data[idx], axis=-1)
-        self.sources[idx] = np.array(["CSV_IMPORTED"])

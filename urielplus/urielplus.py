@@ -19,11 +19,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 URIEL+ library for integrating new and updated databases into URIEL and robust distance calculations.
 
 
-Authors: Aditya Khan, Mason Shipton, David Anugraha, Kaiyao Duan, Phuong H. Hoang, Eric Khiu, A. Seza Doğruöz,
+Contributors: Aditya Khan, Mason Shipton, York Hay Ng, David Anugraha, Kaiyao Duan, Phuong H. Hoang, Eric Khiu, A. Seza Doğruöz,
 En-Shiun Annie Lee
 
 
-Last modified: December 21, 2024
+Last modified: October 30, 2025
 '''
 
 
@@ -41,7 +41,7 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
 
                 Error: Logs an error if a file is not found in the original_uriel directory.
         """
-        self.files = ["family_features.npz", "features.npz", "geocoord_features.npz"]
+        self.files = ["family_features.npz", "features.npz", "geocoord_features.npz", "script_features.npz"]
         self.cur_dir = os.path.dirname(os.path.abspath(__file__))
         self.loaded_features  = []
 
@@ -86,7 +86,7 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
 
             Args:
                 l_name (str): The name of the loaded features to return. Valid options are "phylogeny", "typological",
-                or "geography".
+                "geography", or "scriptural".
 
 
             Returns:
@@ -101,6 +101,7 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
             "phylogeny": self.loaded_features[0],
             "typological": self.loaded_features[1],
             "geography": self.loaded_features[2],
+            "scriptural": self.loaded_features[3],
         }
         if l_name in l_map:
             return l_map[l_name]
@@ -109,8 +110,8 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
 
 
     """
-        The following three functions return loaded features representing phylogeny, typological, and geography
-        vectors, respectively.
+        The following three functions return loaded features representing phylogeny, typological, geography,
+        and scriptural vectors, respectively.
 
 
         Returns:
@@ -127,6 +128,10 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
     def get_geography_loaded_features(self):
         """Returns the geography loaded features."""
         return self.loaded_features[2]
+    
+    def get_scriptural_loaded_features(self):
+        """Returns the scriptural loaded features."""
+        return self.loaded_features[3]
    
 
 
@@ -137,7 +142,7 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
 
             Args:
                 l_name (str): The name of the loaded_features to update. Valid options are "phylogeny", "typological",
-                or "geography".
+                "geography", or "scriptural".
                 file (str): The file name to load the loaded features data from.
 
 
@@ -150,6 +155,7 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
             "phylogeny": 0,
             "typological": 1,
             "geography": 2,
+            "scriptural": 3,
         }
 
 
@@ -180,8 +186,8 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
             sys.exit(1)
    
     """
-        The following three functions updates loaded features representing phylogeny, typological, and geography
-        vectors, respectively.
+        The following three functions updates loaded features representing phylogeny, typological, geography,
+        and scriptural vectors, respectively.
 
 
         Args:
@@ -200,6 +206,10 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
     def set_geography_loaded_features(self, file):
         """Updates the geography loaded features."""
         self.set_loaded_features(self, "geography", file)
+
+    def set_scriptural_loaded_features(self, file):
+        """Updates the scriptural loaded features."""
+        self.set_loaded_features(self, "scriptural", file)
    
 
 
@@ -213,7 +223,7 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
 
             Args:
                 l_name (str): The name of the loaded features to return. Valid options are "phylogeny", "typological",
-                or "geography".
+                "geography", or "scriptural".
 
 
             Returns:
@@ -224,7 +234,7 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
    
     """
         The following three functions return all the arrays within loaded features representing
-        phylogeny, typological, and geography vectors, respectively.
+        phylogeny, typological, geography, and scriptural vectors, respectively.
 
 
         Returns:
@@ -241,6 +251,10 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
     def get_geography_arrays(self):
         """Returns the geography arrays."""
         return self.get_arrays("geography")
+    
+    def get_scriptural_arrays(self):
+        """Returns the scriptural arrays."""
+        return self.get_arrays("scriptural")
 
 
 
@@ -292,6 +306,10 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
     def get_geography_features_array(self):
         """Returns the features array of the geography loaded features."""
         return self.feats[2]
+    
+    def get_scriptural_features_array(self):
+        """Returns the features array of the scriptural loaded features."""
+        return self.feats[3]
    
     def get_phylogeny_languages_array(self):
         """Returns the languages array of the phylogeny loaded features."""
@@ -304,6 +322,10 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
     def get_geography_languages_array(self):
         """Returns the languages array of the geography loaded features."""
         return self.langs[2]
+    
+    def get_scriptural_languages_array(self):
+        """Returns the languages array of the scriptural loaded features."""
+        return self.langs[3]
    
     def get_phylogeny_data_array(self):
         """Returns the data array of the phylogeny loaded features."""
@@ -316,6 +338,10 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
     def get_geography_data_array(self):
         """Returns the data array of the geography loaded features."""
         return self.data[2]
+    
+    def get_scriptural_data_array(self):
+        """Returns the data array of the scriptural loaded features."""
+        return self.data[3]
    
     def get_phylogeny_sources_array(self):
         """Returns the sources array of the phylogeny loaded features."""
@@ -328,6 +354,10 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
     def get_geography_sources_array(self):
         """Returns the sources array of the geography loaded features."""
         return self.sources[2]
+    
+    def get_scriptural_sources_array(self):
+        """Returns the sources array of the scriptural loaded features."""
+        return self.sources[3]
 
 
 
@@ -384,7 +414,7 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
             to the main directory.
         """
         files_to_copy = ["family_features.npz",
-                         "features.npz", "geocoord_features.npz"]
+                         "features.npz", "geocoord_features.npz", "script_features.npz"]
         cont = self.query_yes_no(f"Resetting to URIEL involves copying the files {files_to_copy} into the data directory. Any files with the same name will be replaced. Continue?")
         if not cont:
             return

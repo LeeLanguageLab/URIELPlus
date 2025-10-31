@@ -7,13 +7,20 @@ u.reset()
 #Configuration
 u.set_cache(True)
 
+#Aggregation
+# u.set_aggregation('A')
+
 #Integrating databases
 u.integrate_databases()
 
-u.set_aggregation('A')
+#Feature Coverage
+# u.all_feature_coverage()
 
-#Imputation
+# Imputation
 u.softimpute_imputation()
 
+#Feature Coverage
+# u.all_feature_coverage()
+
 #Distance Calculation
-print(u.new_distance("featural", "stan1290", "stan1293"))
+print(u.new_distance("scriptural", "stan1290", "stan1293"))

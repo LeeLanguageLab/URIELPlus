@@ -39,8 +39,8 @@ class BaseURIEL:
 
 
     def __init__(self, feats, langs, data, sources):
-        #Files of language phylogenetic, typological, and geographical vectors, respectively.
-        self.files = ["family_features.npz", "features.npz", "geocoord_features.npz"]
+        #Files of language phylogenetic, typological, geographical, and scriptural vectors, respectively.
+        self.files = ["family_features.npz", "features.npz", "geocoord_features.npz", "script_features.npz"]
 
 
         self.cur_dir = os.path.dirname(os.path.abspath(__file__))
@@ -102,7 +102,7 @@ class BaseURIEL:
 
 
             Args:
-                aggregation (str): Whether to perform a union ('U') or average ('A') operation on data for aggregation and distance calculations..
+                aggregation (str): Whether to perform a union ('U') or average ('A') operation on data for aggregation and distance calculations.
                
             Logging:
                 Error: Logs an error if the provided strategy value is invalid.
@@ -279,83 +279,38 @@ class BaseURIEL:
 
 
 
-    def get_english_dialects(self):
-        """
-            Returns a list of English dialects.
-
-
-            This function identifies English dialects based on the presence of Macro-English and the absence of Guinea Coast Croele English and
-            Pacific Creole English in a language's phylogeny vector language representation (ISO 639-3 or Glottocode).
-
-
-            Returns:
-                list: A list of code representations for English dialects.
-        """
-        eng_dialects = []
-
-
-        feat_indices = []
-        for feat in ["F_Macro-English", "F_Guinea Coast Creole English", "F_Pacific Creole English"]:
-            feat_indices.append(np.where(self.feats[0] == feat)[0][0])
-
-
-        for lang in self.langs[0]:
-            lang_index = np.where(self.langs[0] == lang)[0][0]
-            isMacroEnglish = 1.0 in self.data[0][lang_index][feat_indices[0]]
-            isNotGuineaCoastCreoleEnglish = 0.0 in self.data[0][lang_index][feat_indices[1]]
-            isNotPacificCreoleEnglish = 0.0 in self.data[0][lang_index][feat_indices[2]]
-            if isMacroEnglish and isNotGuineaCoastCreoleEnglish and isNotPacificCreoleEnglish:
-                eng_dialects.append(lang)
-
-        if self.codes == "Glotto":
-            eng_dialects.remove("stan1293")
-        else:
-            eng_dialects.remove("eng")
-
-
-        return eng_dialects
-   
     def get_dialects(self):
         """
-            Returns a dictionary of dialects, with keys being the base languages and values being a list of the dialects.
+        Returns a dictionary of dialects, with keys being indices of base languages in self.langs[1],
+        and values being lists of the dialect language codes.
 
+        This function dynamically identifies dialects for languages based on the current language
+        representation (ISO 639-3 or Glottocode) by reading from a CSV file containing the mappings.
 
-            This function identifies dialects for specific languages (e.g., Spanish, French, English) based on the current
-            language representation (ISO 639-3 or Glottocode).
+        Returns:
+            dict: A dictionary where keys are indices of base languages, and values are lists of dialect language codes.
 
-
-            NOTE: Non-english dialects are hard-coded using the complete list of languages after integrating all databases.
-
-
-            Returns:
-                dict: A dictionary where keys are indices of base languages, and values are lists of dialect language codes.
+        Logging:
+            Error: If the languages in URIEL+ are not all in either ISO 639-3 or Glottocode representation.
         """
-        if self.codes == "Glotto":
-            SPANISH_DIALECTS = ["lore1243"]
-            FRENCH_DIALECTS = ["caju1236", "gulf1242"]
-            ENGLISH_DIALECTS = self.get_english_dialects()
-            GERMAN_DIALECTS = ["colo1254", "hutt1235", "midd1318", "midd1343", "nort2627", "north2628", "penn1240", "uppe1400"]
-            MALAY_DIALECTS = ["ambo1250", "baba1267", "baca1243", "bali1279", "band1353", "bera1262", "buki1247", "cent2053", "coco1260", "jamb1236", "keda1251", "kota1275", "kupa1239", "lara1260", "maka1305", "mala1479", "mala1480", "mala1481", "nege1240", "nort2828", "papu1250", "patt1249", "saba1263", "sril1245", "teng1267"]
-            ARABIC_DIALECTS = ["alge1239", "alge1240", "anda1287", "baha1259", "chad1249", "cypr1248", "dhof1235", "east2690", "egyp1253", "gulf1241", "hadr1236", "hija1235", "jude1264", "jude1265", "jude1266", "jude1267", "khor1274", "liby1240", "meso1252", "moro1292", "najd1235", "nort3139", "nort3142", "oman1239", "said1239", "sana1295", "suda1236", "taiz1242", "taji1248", "tuni1259", "uzbe1248"]
-            DIALECTS = {np.where(self.langs[1] == "stan1288")[0][0]: SPANISH_DIALECTS,
-                        np.where(self.langs[1] == "stan1290")[0][0]: FRENCH_DIALECTS,
-                        np.where(self.langs[1] == "stan1293")[0][0]: ENGLISH_DIALECTS,
-                        np.where(self.langs[1] == "stan1295")[0][0]: GERMAN_DIALECTS,
-                        np.where(self.langs[1] == "stan1306")[0][0]: MALAY_DIALECTS,
-                        np.where(self.langs[1] == "stan1318")[0][0]: ARABIC_DIALECTS}
-        else:
-            SPANISH_DIALECTS = ["spq"]
-            FRENCH_DIALECTS = ["frc"]
-            ENGLISH_DIALECTS = self.get_english_dialects()
-            GERMAN_DIALECTS = ["gct", "geh", "gml", "gmh", "nds", "frs", "pdc", "sxu"]
-            MALAY_DIALECTS = ["abs", "mbf", "btj", "mhp", "bpq", "bve", "bvu", "pse", "coa", "jax", "meo", "mqg", "mkn", "lrt", "mfp", "zlm", "xdy", "xmm", "zmi", "max", "pmy", "mfa", "msi", "sci", "vkt"]
-            ARABIC_DIALECTS = ["arq", "aao", "xaa", "abv", "shu", "acy", "adf", "avl", "arz", "afb", "ayh", "acw", "yud", "aju", "yhd", "jye", "ayl", "acm", "ary", "ars", "apc", "ayp", "acx", "aec", "ayn", "apd", "acq", "abh", "aeb", "auz"]
-            DIALECTS = {np.where(self.langs[1] == "spa")[0][0]: SPANISH_DIALECTS,
-                        np.where(self.langs[1] == "fra")[0][0]: FRENCH_DIALECTS,
-                        np.where(self.langs[1] == "eng")[0][0]: ENGLISH_DIALECTS,
-                        np.where(self.langs[1] == "deu")[0][0]: GERMAN_DIALECTS,
-                        np.where(self.langs[1] == "zsm")[0][0]: MALAY_DIALECTS,
-                        np.where(self.langs[1] == "arb")[0][0]: ARABIC_DIALECTS}
+        if not self.codes == "Glotto" and not self.codes == "Iso" :
+            logging.error(
+                "Cannot retrieve dialects if languages in URIEL+ are not all of either ISO 639-3 or Glottocode language representation."
+            )
+            sys.exit(1)
+        
+        code = "Glot" if self.codes == "Glotto" else "Iso"
 
+        csv_path = os.path.join(self.cur_dir, "database", "urielplus_csvs", "dialects.csv")
+        dialects_df = pd.read_csv(csv_path)
 
-        return DIALECTS
+        dialects_by_language = {}
+
+        for index, language_code in enumerate(self.langs[1]):
+            row = dialects_df[dialects_df["Language " + code] == language_code]
+            if not row.empty:
+                dialects = row["Dialect(s) " + code].values[0]
+                if pd.notna(dialects):
+                    dialects_by_language[index] = dialects.split(", ")
+
+        return dialects_by_language
