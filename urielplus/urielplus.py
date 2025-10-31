@@ -19,8 +19,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 URIEL+ library for integrating new and updated databases into URIEL and robust distance calculations.
 
 
-Contributors: Aditya Khan, Mason Shipton, York Hay Ng, David Anugraha, Kaiyao Duan, Phuong H. Hoang, Eric Khiu, A. Seza Doğruöz,
-En-Shiun Annie Lee
+Contributors: Aditya Khan (adityakhan@cs.toronto.edu), Mason Shipton (masonshipton25@gmail.com), York Hay Ng (york.ng@mail.utoronto.ca), David Anugraha (anugraha@cs.toronto.edu), Kaiyao Duan (davidduan04@gmail.com), Phuong H. Hoang (fiona.hoang@mail.utoronto.ca), Eric Khiu (erickhiu@umich.edu), James Liu (jameslx@umich.edu), A. Seza Doğruöz (as.dogruoz@ugent.be), En-Shiun Annie Lee (annie.lee@ontariotechu.ca)
 
 
 Last modified: October 30, 2025
