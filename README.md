@@ -134,11 +134,11 @@ Python 3.10 or later. If you're working with the `MIDASpy` extra dependencies, v
 
 + Replace `{database}` with `saphon`, `bdproto`, `grambank`, `apics`, `ewave`, or `glottolog`.
 + Replace `{databases}` with arguments `"UPDATED_SAPHON"`, `"BDPROTO"`, `"GRAMBANK"`, `"APICS"`, `"EWAVE"`, and/or `"GLOTTOLOG"` (e.g., `"UPDATED_SAPHON"`, `"BDPROTO"`, `"EWAVE"`).
-+ Replace `{index}` with `0` for genetic data, `1` for typological data, or `2` for geographic data.
++ Replace `{index}` with `0` for genetic data, `1` for typological data, `2` for geographic data, or `3` for scriptural data.
 
 ## Imputation Examples
 
-+ Aggregate Typological Data:
++ Aggregate Typological and Scriptural Data:
     ```python
     u.set_aggregation({aggregation}) 
     u.aggregate()
@@ -184,5 +184,6 @@ Python 3.10 or later. If you're working with the `MIDASpy` extra dependencies, v
 + Replace `{languages}`, `{language 1}`, and `{language 2}` with language codes (e.g., `"stan1293"`, `"hind1269"`).
 + Replace `{source}` with one database (e.g., `"WALS"`) or all databases (`'A'`).
 + Note: the default `{source}` is all databases.
+
 
 
