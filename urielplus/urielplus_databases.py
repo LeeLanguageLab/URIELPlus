@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 import os
@@ -10,7 +11,6 @@ import pandas as pd
 
 
 from .base_uriel import BaseURIEL
-from .database.urielplus_csvs.duplicate_feature_sets import _u, _ug, _uai, _ue
 
 
 class URIELPlusDatabases(BaseURIEL):
@@ -258,31 +258,44 @@ class URIELPlusDatabases(BaseURIEL):
             np.savez(os.path.join(self.cur_dir, "database", self.files[3]), feats=self.feats[3], data=self.data[3], langs=self.langs[3], sources=self.sources[3])
 
 
+
+    def _load_duplicate_feature_sets(self):
+        """
+            This function loads the JSON file defining duplicate and inferable feature mappings used for feature combination in URIEL+.
+        """
+        path = os.path.join(self.cur_dir, "database", "urielplus_csvs", "duplicate_feature_sets.json")
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+        
+
+    def _ensure_duplicate_feature_sets(self):
+        """
+            This function ensures duplicate feature sets are loaded before use.
+        """
+        if not hasattr(self, "duplicate_feature_sets"):
+            self.duplicate_feature_sets = self._load_duplicate_feature_sets()
+    
+
     def combine_features(self, secondary_source, feature_sets):
         """
             Combines duplicate features and handles opposite features within a specified category of URIEL+ data.
 
 
             Args:
-                second_source (str): The source of the secondary features to combine.
+                secondary_source (str): The source of the secondary features to combine.
                 feat_sets (list): A list of feature sets, each containing the primary feature and the secondary
                 features to combine.
         """
-        secondary_source_index = np.where(self.sources[1] == secondary_source)[0][0]
+        indices = np.where(self.sources[1] == secondary_source)[0]
+        if len(indices) == 0:
+            return
+        secondary_source_index = indices[0]
 
+        for rule in feature_sets:
+            primary_feature = rule["target"]
+            secondary_features = rule["sources"]
+            specific_value = rule.get("threshold", None)
 
-        for feature_set in feature_sets:
-            primary_feature = feature_set[0]
-
-
-            if isinstance(feature_set[1], float):
-                specific_value = feature_set[1]
-                secondary_features = feature_set[2:]
-            else:
-                secondary_features = feature_set[1:]
-
-
-            # Add the primary feature if it doesn't already exist
             if primary_feature not in self.feats[1]:
                 self.data[1] = self._set_new_data_dimensions(self.data[1], [primary_feature], [], [])
                 self.feats[1] = np.append(self.feats[1], primary_feature)
@@ -290,33 +303,34 @@ class URIELPlusDatabases(BaseURIEL):
             else:
                 primary_feature_index = np.where(self.feats[1] == primary_feature)[0][0]
 
-
             for secondary_feature in secondary_features:
-                secondary_feature_index = np.where(self.feats[1] == secondary_feature)[0][0]
+                if secondary_feature not in self.feats[1]:
+                    continue
 
+                secondary_feature_index = np.where(self.feats[1] == secondary_feature)[0][0]
 
                 for lang_idx in range(len(self.langs[1])):
                     secondary_data = self.data[1][lang_idx][secondary_feature_index]
                     primary_data = self.data[1][lang_idx][primary_feature_index]
 
-
                     for src_idx in range(len(primary_data)):
-                        if src_idx == secondary_source_index:
-                            if isinstance(feature_set[1], float):
-                                is_primary_unknown = (primary_data[src_idx] == -1.0)
-                                is_primary_absent = (primary_data[src_idx] == 0.0)
-                                is_secondary_present = (secondary_data[src_idx] == specific_value)
+                        if src_idx != secondary_source_index:
+                            continue
 
+                        if specific_value is not None:
+                            is_primary_unknown = primary_data[src_idx] == -1.0
+                            is_primary_absent = primary_data[src_idx] == 0.0
+                            is_secondary_present = secondary_data[src_idx] == specific_value
 
-                                if (is_primary_unknown or is_primary_absent) and is_secondary_present:
-                                    self.data[1][lang_idx][primary_feature_index][src_idx] = specific_value
-                            else:
-                                if secondary_data[src_idx] > primary_data[src_idx]:
-                                    self.data[1][lang_idx][primary_feature_index][src_idx] = secondary_data[src_idx]
-
+                            if (is_primary_unknown or is_primary_absent) and is_secondary_present:
+                                self.data[1][lang_idx][primary_feature_index][src_idx] = specific_value
+                        else:
+                            if secondary_data[src_idx] > primary_data[src_idx]:
+                                self.data[1][lang_idx][primary_feature_index][src_idx] = secondary_data[src_idx]
 
         if self.cache:
-            np.savez(os.path.join(self.cur_dir, "database", self.files[1]), feats=self.feats[1], langs=self.langs[1], data=self.data[1], sources=self.sources[1])
+            np.savez(os.path.join(self.cur_dir, "database", self.files[1]),
+                feats=self.feats[1], langs=self.langs[1], data=self.data[1], sources=self.sources[1])
 
 
     def inferred_features(self):
@@ -327,12 +341,13 @@ class URIELPlusDatabases(BaseURIEL):
             The function iterates through the available sources and combines features based on predefined sets of
             duplicate features.
         """
+        self._ensure_duplicate_feature_sets()
+
         logging.info("Inferring feature data based on similar features.....")
+        rules = self.duplicate_feature_sets["uriel"]
+
         for source in self.sources[1]:
-            self.combine_features(source, _u)
-
-
-        logging.info("Inferred feature data based on similar features.")
+            self.combine_features(source, rules)
 
 
     def integrate_saphon(self, convert_glottocodes_param=False):
@@ -448,6 +463,7 @@ class URIELPlusDatabases(BaseURIEL):
             and updates the feature data in URIEL+.
         """
         self.is_database_incorporated("GRAMBANK")
+        self._ensure_duplicate_feature_sets()
 
 
         logging.info("Importing Grambank from \"grambank_data.csv\"....")
@@ -501,7 +517,7 @@ class URIELPlusDatabases(BaseURIEL):
         self._calculate_scriptural_vectors()
 
 
-        self.combine_features("GRAMBANK", _ug)
+        self.combine_features("GRAMBANK", self.duplicate_feature_sets["uriel_grambank"])
 
 
         logging.info("Grambank integration complete.")
@@ -516,6 +532,7 @@ class URIELPlusDatabases(BaseURIEL):
             and updates the feature data in URIEL+.
         """
         self.is_database_incorporated("APICS")
+        self._ensure_duplicate_feature_sets()
 
 
         logging.info("Importing APiCS from \"apics_data.csv\"....")
@@ -578,7 +595,7 @@ class URIELPlusDatabases(BaseURIEL):
         self._calculate_scriptural_vectors()
 
 
-        self.combine_features("APICS", _uai)
+        self.combine_features("APICS", self.duplicate_feature_sets["uriel_apics"])
 
 
         logging.info("APiCS integration complete.")
@@ -593,6 +610,7 @@ class URIELPlusDatabases(BaseURIEL):
             and updates the feature data in URIEL+.
         """
         self.is_database_incorporated("EWAVE")
+        self._ensure_duplicate_feature_sets()
 
 
         logging.info("Importing eWAVE from \"english_dialect_data.csv\"....")
@@ -645,7 +663,7 @@ class URIELPlusDatabases(BaseURIEL):
         self._calculate_scriptural_vectors()
 
 
-        self.combine_features("EWAVE", _ue)
+        self.combine_features("EWAVE", self.duplicate_feature_sets["uriel_ewave"])
 
 
         logging.info("eWAVE integration complete.")

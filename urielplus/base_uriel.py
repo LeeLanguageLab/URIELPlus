@@ -165,7 +165,7 @@ class BaseURIEL:
 
 
             Args:
-                distance_metric (bool): The distance metric to use for distance calculations.
+                distance_metric (str): The distance metric to use for distance calculations.
                
             Logging:
                 Error: Logs an error if the provided distance metric value is invalid.

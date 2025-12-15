@@ -1,0 +1,138 @@
+{
+  "uriel": [
+    { "target": "S_SUBJECT_BEFORE_VERB", "threshold": 1.0, "sources": ["S_SVO", "S_OSV"] },
+    { "target": "S_SUBJECT_AFTER_VERB", "threshold": 1.0, "sources": ["S_VSO", "S_OVS"] },
+    { "target": "S_OBJECT_AFTER_VERB", "threshold": 1.0, "sources": ["S_SVO", "S_VOS", "S_VOX", "S_XVO"] },
+    { "target": "S_OBJECT_BEFORE_VERB", "threshold": 1.0, "sources": ["S_SOV", "S_OVS", "S_XOV", "S_OVX"] },
+    { "target": "S_SUBJECT_BEFORE_OBJECT", "threshold": 1.0, "sources": ["S_SOV", "S_VSO"] },
+    { "target": "S_SUBJECT_AFTER_OBJECT", "threshold": 1.0, "sources": ["S_VOS", "S_OSV"] },
+
+    { "target": "P_VOICED_PLOSIVES", "sources": [
+      "INV_VOICED_BILABIAL_PLOSIVE",
+      "INV_VOICED_BILABIAL_PLOSIVE_WITH_VOICED_LABIODENTAL_FRICATIVE",
+      "INV_VOICED_BILABIAL_PLOSIVE_WITH_VOICED_BILABIAL_FRICATIVE",
+      "INV_VOICED_ALVEOLAR_PLOSIVE",
+      "INV_VOICED_ALVEOLAR_PLOSIVE_WITH_VOICED_DENTAL_FRICATIVE",
+      "INV_VOICED_ALVEOLAR_PLOSIVE_WITH_VOICED_ALVEOLAR_LATERAL_FRICATIVE",
+      "INV_VOICED_ALVEOLAR_PLOSIVE_WITH_VOICED_ALVEOPALATAL_FRICATIVE",
+      "INV_VOICED_ALVEOLAR_PLOSIVE_WITH_VOICED_POSTALVEOLAR_FRICATIVE",
+      "INV_VOICED_RETROFLEX_PLOSIVE",
+      "INV_VOICED_RETROFLEX_PLOSIVE_WITH_VOICED_RETROFLEX_FRICATIVE",
+      "INV_VOICED_PALATAL_PLOSIVE",
+      "INV_VOICED_PALATAL_PLOSIVE_WITH_VOICED_PALATAL_FRICATIVE",
+      "INV_VOICED_VELAR_PLOSIVE_WITH_VOICED_BILABIAL_PLOSIVE",
+      "INV_VOICED_VELAR_PLOSIVE_WITH_VOICED_VELAR_FRICATIVE",
+      "INV_VOICED_UVULAR_PLOSIVE"
+    ] },
+
+    { "target": "P_VOICED_FRICATIVES", "sources": [
+      "INV_VOICED_LABIODENTAL_FRICATIVE",
+      "INV_VOICED_DENTAL_FRICATIVE",
+      "INV_VOICED_RETROFLEX_FRICATIVE",
+      "INV_VOICED_PALATAL_FRICATIVE",
+      "INV_VOICED_VELAR_FRICATIVE",
+      "INV_VOICED_GLOTTAL_FRICATIVE",
+      "INV_VOICED_ALVEOLAR_LATERAL_FRICATIVE",
+      "INV_VOICED_ALVEOPALATAL_FRICATIVE",
+      "INV_VOICED_POSTALVEOLAR_FRICATIVE",
+      "INV_VOICED_PHARYNGEAL_FRICATIVE",
+      "INV_VOICED_BILABIAL_FRICATIVE",
+      "INV_VOICED_UVULAR_FRICATIVE"
+    ] },
+
+    { "target": "P_IMPLOSIVES", "sources": [
+      "INV_VOICED_BILABIAL_IMPLOSIVE",
+      "INV_VOICED_ALVEOLAR_IMPLOSIVE",
+      "INV_VOICED_VELAR_IMPLOSIVE",
+      "INV_VOICED_PALATAL_IMPLOSIVE"
+    ] },
+
+    { "target": "P_UVULARS", "sources": [
+      "INV_VOICELESS_UVULAR_PLOSIVE",
+      "INV_VOICED_UVULAR_PLOSIVE",
+      "INV_UVULAR_NASAL",
+      "INV_UVULAR_TRILL",
+      "INV_UVULAR_APPROXIMANT",
+      "INV_VOICED_UVULAR_FRICATIVE"
+    ] },
+
+    { "target": "P_LATERALS", "sources": [
+      "INV_ALVEOLAR_LATERAL_APPROXIMANT",
+      "INV_VOICED_RETROFLEX_LATERAL_APPROXIMANT",
+      "INV_PALATAL_LATERAL_APPROXIMANT",
+      "INV_VELAR_LATERAL_APPROXIMANT"
+    ] },
+
+    { "target": "P_FRONT_ROUND_VOWELS", "sources": [
+      "INV_CLOSE_FRONT_ROUNDED_VOWEL",
+      "INV_CLOSE_MID_FRONT_ROUNDED_VOWEL",
+      "INV_OPEN_MID_FRONT_ROUNDED_VOWEL",
+      "INV_OPEN_FRONT_ROUNDED_VOWEL"
+    ] },
+
+    { "target": "P_NASALS", "sources": [
+      "INV_BILABIAL_NASAL",
+      "INV_ALVEOLAR_NASAL",
+      "INV_VELAR_NASAL",
+      "INV_LABIODENTAL_NASAL",
+      "INV_PALATAL_NASAL",
+      "INV_RETROFLEX_NASAL",
+      "INV_UVULAR_NASAL"
+    ] },
+
+    { "target": "P_CODAS", "threshold": 1.0, "sources": ["P_COMPLEX_CODAS"] }
+  ],
+
+  "uriel_grambank": [
+    { "target": "S_GENDER_MARK", "threshold": 1.0, "sources": [
+      "S_3RD_PERSON_GENDER_DIST",
+      "M_2ND_PERSON_GENDER_DIST",
+      "M_1ST_PERSON_GENDER_DIST"
+    ] },
+    { "target": "M_FUTURE_MARK", "threshold": 1.0, "sources": ["S_FUTURE_AFFIX"] },
+    { "target": "S_VERB_INIT_TRANS", "threshold": 1.0, "sources": ["S_VSO", "S_VOS"] },
+    { "target": "S_VERB_MED_TRANS", "threshold": 1.0, "sources": ["S_SVO", "S_OVS"] },
+    { "target": "S_VERB_FINAL_TRANS", "threshold": 1.0, "sources": ["S_SOV", "S_OSV"] },
+    { "target": "M_CLAUSE_FINAL_NEG", "threshold": 1.0, "sources": ["S_NEGATIVE_WORD_FINAL", "S_NEGATIVE_SUFFIX"] },
+    { "target": "M_CLAUSE_INIT_NEG", "threshold": 1.0, "sources": ["S_NEGATIVE_WORD_INITIAL", "S_NEGATIVE_PREFIX"] }
+  ],
+
+  "uriel_apics": [
+    { "target": "S_NEGATIVE_BEFORE_VERB", "threshold": 1.0, "sources": ["S_NEGATIVE_WORD_BEFORE_VERB", "S_NEGATIVE_PREFIX"] },
+    { "target": "S_NEGATIVE_AFTER_VERB", "threshold": 1.0, "sources": ["S_NEGATIVE_WORD_AFTER_VERB", "S_NEGATIVE_SUFFIX"] },
+    { "target": "S_OBJECT_AFTER_VERB", "threshold": 1.0, "sources": ["S_AVO", "S_VOA"] },
+    { "target": "S_OBJECT_BEFORE_VERB", "threshold": 1.0, "sources": ["S_AOV", "S_OVA"] },
+    { "target": "S_PLURAL_MARK", "threshold": 1.0, "sources": ["M_PROD_PLURAL_MARK", "M_ASSOC_PLURAL_MARK"] }
+  ],
+
+  "uriel_ewave": [
+    { "target": "S_COPULA_PRED_LOC", "threshold": 1.0, "sources": [
+      "M_OTHER_FORMS/PHRASES_FOR_COPULA_ʼBEʼ:_BEFORE_LOCATIVES",
+      "S_DELETION_OF_COPULA_BE:_BEFORE_LOCATIVES"
+    ] },
+    { "target": "S_COPULA_PRED_ADJ", "threshold": 1.0, "sources": [
+      "M_OTHER_FORMS/PHRASES_FOR_COPULA_ʼBEʼ:_BEFORE_ADJPS",
+      "S_DELETION_OF_COPULA_BE:_BEFORE_ADJPS"
+    ] },
+    { "target": "S_COPULA_PRED_NOUN", "threshold": 1.0, "sources": [
+      "M_OTHER_FORMS/PHRASES_FOR_COPULA_ʼBEʼ:_BEFORE_NPS",
+      "S_DELETION_OF_COPULA_BE:_BEFORE_NPS"
+    ] },
+    { "target": "S_EXISTENTIAL_VERB", "threshold": 1.0, "sources": [
+      "S_EXISTENTIAL_CONSTRUCTION_TO_EXPRESS_POSSESSIVE"
+    ] },
+    { "target": "S_SERIAL_VERB_CONSTR", "threshold": 1.0, "sources": [
+      "M_SERIAL_VERBS:_GIVE_=_ʼTO,_FORʼ",
+      "M_SERIAL_VERBS:_GO_=_ʼMOVEMENT_AWAY_FROMʼ",
+      "M_SERIAL_VERBS:_COME_=_ʼMOVEMENT_TOWARDSʼ",
+      "M_SERIAL_VERBS:_CONSTRUCTIONS_WITH_3_VERBS",
+      "M_SERIAL_VERBS:_CONSTRUCTIONS_WITH_4_OR_MORE_VERBS"
+    ] },
+    { "target": "S_3RD_PERSON_GENDER_DIST", "threshold": 0.0, "sources": [
+      "M_NO_GENDER_DISTINCTION_IN_THIRD_PERSON_SINGULAR"
+    ] },
+    { "target": "S_GENDER_MARK", "threshold": 0.0, "sources": [
+      "M_NO_GENDER_DISTINCTION_IN_THIRD_PERSON_SINGULAR"
+    ] }
+  ]
+}
