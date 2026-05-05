@@ -33,6 +33,8 @@ class URIELPlusImputation(BaseURIEL):
                 sources (np.ndarray): The sources of the three loaded features.
         """
         super().__init__(feats, langs, data, sources)
+        self.lineage_imputed_indices = set()
+        self.include_lineage_in_eval = False
 
 
 
@@ -93,6 +95,8 @@ class URIELPlusImputation(BaseURIEL):
                 root_nodes = all_parent_indices - all_child_indices
                 logging.info(f"Found {len(root_nodes)} root languages for genetic imputation.")
 
+                self.lineage_imputed_indices = set()
+
                 for root_idx in root_nodes:
                     queue = collections.deque([root_idx])
                     visited = {root_idx}
@@ -104,10 +108,17 @@ class URIELPlusImputation(BaseURIEL):
                                 child_idx = glottocode_to_idx.get(child_glottocode)
                                 if child_idx is not None and child_idx not in visited:
                                     child_features = aggregated_data[child_idx]
+                                    before = child_features.copy()
                                     updated_child_features = self._geneticFill(parent_features, child_features)
                                     aggregated_data[child_idx] = updated_child_features
+
+                                    changed_feats = np.where(updated_child_features != before)[0]
+                                    for feat_idx in changed_feats:
+                                        self.lineage_imputed_indices.add((child_idx, feat_idx))
+
                                     visited.add(child_idx)
                                     queue.append(child_idx)
+                logging.info(f"Genetic imputation filled {len(self.lineage_imputed_indices)} values.")
                 logging.info("Genetic imputation finished.")
        
         if self.aggregation == 'U':
@@ -175,7 +186,7 @@ class URIELPlusImputation(BaseURIEL):
         return X_missing, missing_indices
 
 
-    def _evaluate_imputation(self, X_test_orig, X_test_imputed, missing_indices):
+    def _evaluate_imputation(self, X_test_orig, X_test_imputed, missing_indices, lineage_imputed_indices=None):
         """
             Evaluates the imputation results by comparing the imputed values to the original values.
 
@@ -189,6 +200,10 @@ class URIELPlusImputation(BaseURIEL):
             Returns:
                 dict: A dictionary containing evaluation metrics (e.g., accuracy, precision, recall, F1 score, RMSE, MAE).
         """
+        if lineage_imputed_indices:
+            missing_indices = [(i, j) for (i, j) in missing_indices
+                            if (i, j) not in lineage_imputed_indices]
+        
         orig = [X_test_orig[i][j] for i, j in missing_indices]
         imputed = [X_test_imputed[i][j] for i, j in missing_indices]
         # check if nans are present in the imputed data
@@ -288,7 +303,7 @@ class URIELPlusImputation(BaseURIEL):
 
 
     def _evaluate_imputation_by_feature(self, X_test_orig, X_test_imputed, missing_indices,
-                                   feature_types):
+                                   feature_types, lineage_imputed_indices=None):
         """
             Evaluates the imputation results by feature type.
 
@@ -307,6 +322,10 @@ class URIELPlusImputation(BaseURIEL):
             Logging:
                 Error: Logs error if any metric calculations results in errors.
         """
+        if lineage_imputed_indices:
+            missing_indices = [(i, j) for (i, j) in missing_indices
+                            if (i, j) not in lineage_imputed_indices]
+
         feat_metrics = {key: {} for key in feature_types.keys()}
 
 
@@ -392,11 +411,13 @@ class URIELPlusImputation(BaseURIEL):
                                     init_fill_method="mean")
                 _ = imputer.fit_transform(X_train)
                 X_test_imputed = imputer.fit_transform(X_test_missing)
-        metrics = self._evaluate_imputation(X_test, X_test_imputed, missing_indices)
-        # metrics = evaluate_imputation(orig=X_test_missing, imputed=X_test_imputed, missing_indices=missing_indices, union_or_average=union_or_average)
+        metrics = self._evaluate_imputation(X_test, X_test_imputed, missing_indices,
+                                            lineage_imputed_indices=None if self.include_lineage_in_eval
+                                            else self.lineage_imputed_indices)
         feature_metrics = self._evaluate_imputation_by_feature(X_test, X_test_imputed,
-                                                        missing_indices,
-                                                        feature_types)
+                                                                missing_indices, feature_types,
+                                                                lineage_imputed_indices=None if self.include_lineage_in_eval
+                                                                else self.lineage_imputed_indices)
 
 
         # print(f"Time taken for {strategy} with hyperparameter {hyperparameter}: {t.elapsed}")
@@ -449,6 +470,8 @@ class URIELPlusImputation(BaseURIEL):
                 imputer = SoftImpute(shrinkage_value=hyperparameter, max_iters=400, max_value=1, min_value=0, init_fill_method="mean")
                 _ = imputer.fit_transform(X_train_fold)
                 X_val_imputed = imputer.fit_transform(X_val_missing)
+            # Note: lineage_imputed_indices not passed here intentionally - row indices
+            # do not align with fold subsets during cross-validation.
             metrics = self._evaluate_imputation(X_val_fold, X_val_imputed, missing_indices)
             feature_metrics = self._evaluate_imputation_by_feature(X_val_fold, X_val_imputed, missing_indices, feature_types)
             fold_metrics.append(metrics)
@@ -581,6 +604,7 @@ class URIELPlusImputation(BaseURIEL):
         """
         if file_path_to_save_npz == None:
             file_path_to_save_npz == os.path.join(self.cur_dir, "database")
+        X_true = X  # used in evaluation calls below; MIDAS overrides this with X.values
         if strategy == "knn":
             imputer = imputer_class(n_neighbors=hyperparameter, keep_empty_features=True)
         elif strategy == "softimpute":
@@ -629,8 +653,12 @@ class URIELPlusImputation(BaseURIEL):
             multiple_feature_metrics = []
             for i in range(num_samples):
                 X_imputed = imputations[i].to_numpy()
-                metrics = self._evaluate_imputation(X_true, X_imputed, missing_indices)
-                feature_metrics = self._evaluate_imputation_by_feature(X_true, X_imputed, missing_indices, feature_types)
+                metrics = self._evaluate_imputation(X_true, X_imputed, missing_indices,
+                                    lineage_imputed_indices=None if self.include_lineage_in_eval
+                                    else self.lineage_imputed_indices)
+                feature_metrics = self._evaluate_imputation_by_feature(X_true, X_imputed, missing_indices, feature_types,
+                                                                        lineage_imputed_indices=None if self.include_lineage_in_eval
+                                                                        else self.lineage_imputed_indices)
                 multiple_metrics.append(metrics)
                 multiple_feature_metrics.append(feature_metrics)
                 logging.info(f"Metrics for {strategy} with hyperparameter {hyperparameter} and imputed dataset sample {i}: {metrics}")
@@ -667,10 +695,12 @@ class URIELPlusImputation(BaseURIEL):
                 X_imputed = imputer.fit_transform(X)
             logging.info(f"Time taken for {strategy} (final imputation): {t.elapsed}")
         if missing_indices is not None:
-            metrics = self._evaluate_imputation(X, X_imputed, missing_indices)
-            feature_metrics = self._evaluate_imputation_by_feature(X, X_imputed,
-                                                            missing_indices,
-                                                            feature_types)
+            metrics = self._evaluate_imputation(X_true, X_imputed, missing_indices,
+                                                lineage_imputed_indices=None if self.include_lineage_in_eval
+                                                else self.lineage_imputed_indices)
+            feature_metrics = self._evaluate_imputation_by_feature(X_true, X_imputed, missing_indices, feature_types,
+                                                                    lineage_imputed_indices=None if self.include_lineage_in_eval
+                                                                    else self.lineage_imputed_indices)
             if not on_test_set:
                 logging.info(f"Overall metrics for {strategy} with hyperparameter {hyperparameter}: {metrics}")
                 logging.info(f"Overall feature metrics for {strategy} with hyperparameter {hyperparameter}: {feature_metrics}")

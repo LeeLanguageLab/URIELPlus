@@ -66,6 +66,7 @@ class URIELPlus(URIELPlusDatabases, URIELPlusImputation, URIELPlusQuerying):
         self.data = [l["data"] for l in self.loaded_features]
         self.sources = [l["sources"] for l in self.loaded_features]
 
+        super().__init__(self.feats, self.langs, self.data, self.sources)
 
         self.databases = URIELPlusDatabases(self.feats, self.langs, self.data, self.sources)
         self.imputation = URIELPlusImputation(self.feats, self.langs, self.data, self.sources)
