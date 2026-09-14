@@ -23,4 +23,4 @@ u.softimpute_imputation()
 # u.all_feature_coverage()
 
 #Distance Calculation
-print(u.new_distance("scriptural", "stan1290", "stan1293"))
+print(u.new_distance("script", "stan1290", "stan1293"))

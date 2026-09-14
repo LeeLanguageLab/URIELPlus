@@ -1,2 +1,13 @@
 include urielplus/database/urielplus_csvs/*.csv
+include urielplus/database/urielplus_csvs/feature_mappings.json
+include urielplus/database/urielplus_csvs/resource_languages.json
 include urielplus/database/original_uriel/*.npz
+include urielplus/database/family_features.npz
+include urielplus/database/features.npz
+include urielplus/database/geocoord_features.npz
+include urielplus/database/script_features.npz
+exclude urielplus/database/*_union.npz
+exclude urielplus/database/*_average.npz
+prune urielplus/database/non_imputed_data
+include LICENSE.txt
+include THIRD_PARTY_NOTICES.md
