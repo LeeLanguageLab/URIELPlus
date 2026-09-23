@@ -154,10 +154,10 @@ class URIELPlusDatabases(BaseURIEL):
         for row, language in enumerate(languages):
             if language not in selected.index:
                 continue
+            data[row, :, 0] = 0
             parts = self._lineage_parts(selected.at[language, "lineage"])
             if not parts:
                 continue
-            data[row, :, 0] = 0
             indices = [path_index[parts[:depth]] for depth in range(1, len(parts) + 1)]
             data[row, indices, 0] = 1
 

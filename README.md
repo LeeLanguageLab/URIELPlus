@@ -208,26 +208,43 @@ The core package is tested on Python 3.10, 3.11, and 3.12. It does not require T
 
 ## Database Integration Examples
 
-+ Integrating One Database:
-    ```python
-    u.integrate_{database}()
-    ```
-+ Integrating Some Databases:
-    ```python
-    u.integrate_custom_databases({databases})
-    ```
++ NOTE: `integrate_databases()` integrates **all** available databases, including eWAVE and APiCS, which you may not want. eWAVE adds hundreds of features that only apply to English dialects, and APiCS adds hundreds of features but has data for only 76 languages. Both can add substantial sparsity and features you may not need. To exclude them, integrate only the databases you want, either individually or in one call (see "Integrating Only Some Databases" below).
+
 + Integrating All Databases:
     ```python
     u.integrate_databases()
     ```
++ Integrating One Database:
+    ```python
+    u.integrate_{database}()
+    ```
++ Integrating Only Some Databases (Excluding Others):
+    ```python
+    u.integrate_custom_databases({databases})
+    ```
+
++ Example: Integrating Every Database Except eWAVE and APiCS
+    ```python
+    # Option 1: one call
+    u.integrate_custom_databases("UPDATED_SAPHON", "BDPROTO", "GRAMBANK", "GLOTTOLOG")
+
+    # Option 2: one database at a time
+    u.integrate_saphon()
+    u.integrate_bdproto()
+    u.integrate_grambank()
+    u.integrate_glottolog()
+    ```
+
 + Set Language Codes to Glottocodes:
     ```python
     u.set_glottocodes()
     ```
+
 + Reset all changes:
     ```python
     u.reset()
     ```
+
 + NOTE: `reset()` only resets URIEL+'s in-memory attributes back to their initial state. It does not change or delete any files that were already written to disk when caching was enabled. If you want those cached files reset as well, you will need to remove or replace them manually.
 
 + Replace `{database}` with `saphon`, `bdproto`, `grambank`, `apics`, `ewave`, or `glottolog`.

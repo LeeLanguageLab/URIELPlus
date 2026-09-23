@@ -1,6 +1,6 @@
 # Third-party notices
 
-URIELPlus v1.3 is distributed under the Creative Commons Attribution-ShareAlike 4.0 International licence in `LICENSE.txt`. The source tables incorporated into the released database retain the separate licences stated below. The licences for those source tables are not replaced by the URIELPlus licence.
+URIELPlus v1.3.1 is distributed under the Creative Commons Attribution-ShareAlike 4.0 International licence in `LICENSE.txt`. The source tables incorporated into the released database retain the separate licences stated below. The licences for those source tables are not replaced by the URIELPlus licence.
 
 | Source material | Locked version | Files containing derived values | Attribution | Source licence | Primary licence record |
 | --- | --- | --- | --- | --- | --- |
