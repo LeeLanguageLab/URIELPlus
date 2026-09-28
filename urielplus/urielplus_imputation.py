@@ -165,14 +165,14 @@ class URIELPlusImputation(BaseURIEL):
                                 child_idx = glottocode_to_idx.get(child_glottocode)
                                 if child_idx is not None and child_idx not in visited:
                                     child_features = aggregated_data[child_idx]
-                                    before = child_features.copy()
 
                                     fill_mask = (child_features == -1.0) & (parent_features > -1.0)
-                                    updated_child_features = np.where(fill_mask, parent_features, child_features)
 
-                                    changed_feats = np.where(updated_child_features != before)[0]
-                                    for feat_idx in changed_feats:
-                                        self.lineage_imputed_indices.add((child_idx, feat_idx))
+                                    if fill_mask.any():
+                                        aggregated_data[child_idx] = np.where(fill_mask, parent_features, child_features)
+
+                                        for feat_idx in np.where(fill_mask)[0]:
+                                            self.lineage_imputed_indices.add((child_idx, int(feat_idx)))
 
                                     visited.add(child_idx)
                                     queue.append(child_idx)
