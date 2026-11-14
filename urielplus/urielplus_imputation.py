@@ -281,7 +281,7 @@ class URIELPlusImputation(BaseURIEL):
             overall_metrics["classification_error"] = classification_error
             overall_metrics["precision"] = precision
             overall_metrics["recall"] = recall
-            overall_metrics["f"] = f1
+            overall_metrics["f1"] = f1
 
             # Calculate differences in proportions of 1s for each feature
             feature_differences = {}
@@ -312,24 +312,17 @@ class URIELPlusImputation(BaseURIEL):
                 overall_metrics["average_diff"] = average_diff
                 overall_metrics["smallest_diff"] = smallest_diff
 
-                proportion_diffs_sorted = sorted(proportion_diffs)
-                q1 = np.percentile(proportion_diffs_sorted, 25)
-                q2 = np.percentile(proportion_diffs_sorted, 50)
-                q3 = np.percentile(proportion_diffs_sorted, 75)
+                q1, q2, q3 = np.percentile(proportion_diffs, [25, 50, 75])
 
-                quartile_counts = {
-                    f"Q1 ({q1})": sum(diff <= q1 for diff in proportion_diffs),
-                    f"Q2 ({q2})": sum(q1 < diff <= q2 for diff in proportion_diffs),
-                    f"Q3 ({q3})": sum(q2 < diff <= q3 for diff in proportion_diffs),
-                    f"Q4 ({np.max(proportion_diffs)})": sum(
-                        diff > q3 for diff in proportion_diffs)
-                }
+                overall_metrics["q1_threshold"] = q1
+                overall_metrics["q2_threshold"] = q2
+                overall_metrics["q3_threshold"] = q3
+                overall_metrics["q4_threshold"] = max(proportion_diffs)
 
-                overall_metrics[f"Q1 ({q1})"] = quartile_counts[f"Q1 ({q1})"]
-                overall_metrics[f"Q2 ({q2})"] = quartile_counts[f"Q2 ({q2})"]
-                overall_metrics[f"Q3 ({q3})"] = quartile_counts[f"Q3 ({q3})"]
-                overall_metrics[f"Q4 ({np.max(proportion_diffs)})"] = \
-                quartile_counts[f"Q4 ({np.max(proportion_diffs)})"]
+                overall_metrics["q1_count"] = sum(d <= q1 for d in proportion_diffs)
+                overall_metrics["q2_count"] = sum(q1 < d <= q2 for d in proportion_diffs)
+                overall_metrics["q3_count"] = sum(q2 < d <= q3 for d in proportion_diffs)
+                overall_metrics["q4_count"] = sum(d > q3 for d in proportion_diffs)
 
         elif self.aggregation == 'A':
             rmse = root_mean_squared_error(orig, imputed)
@@ -365,9 +358,9 @@ class URIELPlusImputation(BaseURIEL):
         feat_metrics = {key: {} for key in feature_types.keys()}
 
         for feature_type, indices in feature_types.items():
-            orig = [X_test_orig[i][j] for i, j in missing_indices if j in indices]
-            imputed = [X_test_imputed[i][j] for i, j in missing_indices if
-                    j in indices]
+            idx_set = set(indices)
+            orig = [X_test_orig[i][j] for i, j in missing_indices if j in idx_set]
+            imputed = [X_test_imputed[i][j] for i, j in missing_indices if j in idx_set]
             if self.aggregation == 'U':
                 try:
                     if orig and imputed:  # Check if there are values to evaluate
@@ -425,6 +418,7 @@ class URIELPlusImputation(BaseURIEL):
             Returns:
                 tuple: A tuple containing the imputed dataset, the hyperparameter used, and the evaluation metric value.
         """
+        _load_imputation_dependencies(strategy)
         logging.info("starting impute_wrt_hyperparameter")
         # SystemExit("Exiting")
         imputer = None
@@ -478,6 +472,7 @@ class URIELPlusImputation(BaseURIEL):
                     - hyperparameter: The hyperparameter used for the imputation.
                     - avg_metric[eval_metric]: The average value of the specified evaluation metric across the folds.
         """
+        _load_imputation_dependencies(strategy)
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=0)
         fold_metrics = []
         fold_feature_metrics = []
@@ -487,7 +482,7 @@ class URIELPlusImputation(BaseURIEL):
             imputer = None
             if strategy == "knn":
                 imputer = KNNImputer(n_neighbors=hyperparameter, keep_empty_features=True)
-                _ = imputer.fit_transform(X_train_fold)
+                imputer.fit(X_train_fold)
                 X_val_imputed = imputer.transform(X_val_missing)
             elif strategy == "softimpute":
                 imputer = SoftImpute(shrinkage_value=hyperparameter, max_iters=400, max_value=1, min_value=0, init_fill_method="mean")
@@ -500,13 +495,16 @@ class URIELPlusImputation(BaseURIEL):
             fold_metrics.append(metrics)
             fold_feature_metrics.append(feature_metrics)
         # compute mean of metrics across folds, understanding metrics are dictionaries
-        avg_metric = {}
-        for key in fold_metrics[0].keys():
-            avg_metric[key] = np.mean([fold_metrics[i][key] for i in range(n_splits)])
-        avg_feature_metrics = {key: {} for key in feature_types.keys()}
-        for key in feature_types.keys():
-            for metric in fold_feature_metrics[0][key].keys():
-                avg_feature_metrics[key][metric] = np.mean([fold_feature_metrics[i][key].get(metric, np.nan) for i in range(n_splits)])
+        avg_metric = {
+            eval_metric: np.mean([metrics[eval_metric] for metrics in fold_metrics])
+        }
+        avg_feature_metrics = {}
+        for feature_type in feature_types:
+            avg_feature_metrics[feature_type] = {}
+            metric_names = set().union(*(fold[feature_type].keys() for fold in fold_feature_metrics))
+            for metric in metric_names:
+                values = [fold[feature_type][metric] for fold in fold_feature_metrics if metric in fold[feature_type]]
+                avg_feature_metrics[feature_type][metric] = np.mean(values)
         logging.info(f"Average metrics for {strategy} on {n_splits}-fold CV with hyperparameter {hyperparameter}: {avg_metric}")
         logging.info(f"Average feature metrics for {strategy} on {n_splits}-fold CV with hyperparameter {hyperparameter}: {avg_feature_metrics}")
         return X_train, hyperparameter, avg_metric[eval_metric]
@@ -590,10 +588,18 @@ class URIELPlusImputation(BaseURIEL):
         return best_hyperparameter
 
 
+    def _parallel_knn_transform(self, imputer, X, n_chunks=None):
+        n_chunks = min(n_chunks or (os.cpu_count() or 1) * 2, len(X))
+        chunks = np.array_split(X, n_chunks)
+        parts = Parallel(n_jobs=-1)(delayed(imputer.transform)(c) for c in chunks)
+        return np.vstack(parts)
+
+
     def _standard_impute(self, X, imputer_class, strategy, X_missing=None,
                     hyperparameter=None,
                     feature_types=None, missing_indices=None, midas_bin_vars=None,
-                    on_test_set=False, file_path_to_save_npz=None, metrics_filename="imputation_metrics.csv"):
+                    on_test_set=False, file_path_to_save_npz=None, metrics_filename="imputation_metrics.csv",
+                    apply_lineage_filter=True):
         """
             Imputes missing data using a specified imputation strategy.
 
@@ -614,8 +620,9 @@ class URIELPlusImputation(BaseURIEL):
             Returns:
                 np.ndarray: The imputed dataset.
         """
-        if file_path_to_save_npz == None:
-            file_path_to_save_npz == os.path.join(self.cur_dir, "database")
+        if file_path_to_save_npz is None:
+            file_path_to_save_npz = os.path.join(self.cur_dir, "database")
+        lineage = None if (self.include_lineage_in_eval or not apply_lineage_filter) else self.lineage_imputed_indices
         X_true = X  # used in evaluation calls below; MIDAS overrides this with X.values
         if strategy == "knn":
             imputer = imputer_class(n_neighbors=hyperparameter, keep_empty_features=True)
@@ -648,7 +655,7 @@ class URIELPlusImputation(BaseURIEL):
                     imputer = md.Midas(layer_structure=[256, 256, 256], vae_layer=False, seed=0, input_drop=0.8, savepath=file_path)
                     imputer.build_model(X_missing, binary_columns=midas_bin_vars)
                     imputer.train_model(training_epochs=50)
-            logging.info("Time taken to train the model: ", t.elapsed)
+            logging.info("Time taken to train the model: %s", t.elapsed)
             num_samples = 5
             imputations = imputer.generate_samples(m=num_samples).output_list
             for i in range(num_samples):
@@ -665,11 +672,9 @@ class URIELPlusImputation(BaseURIEL):
             for i in range(num_samples):
                 X_imputed = imputations[i].to_numpy()
                 metrics = self._evaluate_imputation(X_true, X_imputed, missing_indices,
-                                    lineage_imputed_indices=None if self.include_lineage_in_eval
-                                    else self.lineage_imputed_indices)
+                                    lineage_imputed_indices=lineage)
                 feature_metrics = self._evaluate_imputation_by_feature(X_true, X_imputed, missing_indices, feature_types,
-                                                                        lineage_imputed_indices=None if self.include_lineage_in_eval
-                                                                        else self.lineage_imputed_indices)
+                                                                        lineage_imputed_indices=lineage)
                 multiple_metrics.append(metrics)
                 multiple_feature_metrics.append(feature_metrics)
                 logging.info(f"Metrics for {strategy} with hyperparameter {hyperparameter} and imputed dataset sample {i}: {metrics}")
@@ -693,21 +698,20 @@ class URIELPlusImputation(BaseURIEL):
             X_imputed = imputations[0].to_numpy()
             return X_imputed
 
-        if X_missing is not None:
-            with contexttimer.Timer() as t:
-                X_imputed = imputer.fit_transform(X_missing)
-            logging.info(f"Time taken for {strategy} (initial imputation): {t.elapsed}")
-        else:
-            with contexttimer.Timer() as t:
-                X_imputed = imputer.fit_transform(X)
-            logging.info(f"Time taken for {strategy} (final imputation): {t.elapsed}")
+        fit_data = X_missing if X_missing is not None else X
+        label = "initial imputation" if X_missing is not None else "final imputation"
+        with contexttimer.Timer() as t:
+            if strategy == "knn":
+                imputer.fit(fit_data)
+                X_imputed = self._parallel_knn_transform(imputer, fit_data)
+            else:
+                X_imputed = imputer.fit_transform(fit_data)
+        logging.info(f"Time taken for {strategy} ({label}): {t.elapsed}")
         if missing_indices is not None:
             metrics = self._evaluate_imputation(X_true, X_imputed, missing_indices,
-                                                lineage_imputed_indices=None if self.include_lineage_in_eval
-                                                else self.lineage_imputed_indices)
+                                                lineage_imputed_indices=lineage)
             feature_metrics = self._evaluate_imputation_by_feature(X_true, X_imputed, missing_indices, feature_types,
-                                                                    lineage_imputed_indices=None if self.include_lineage_in_eval
-                                                                    else self.lineage_imputed_indices)
+                                                                    lineage_imputed_indices=lineage)
             if not on_test_set:
                 logging.info(f"Overall metrics for {strategy} with hyperparameter {hyperparameter}: {metrics}")
                 logging.info(f"Overall feature metrics for {strategy} with hyperparameter {hyperparameter}: {feature_metrics}")
@@ -761,7 +765,8 @@ class URIELPlusImputation(BaseURIEL):
                                         hyperparameter=best_hyperparameter,
                                         feature_types=feature_types,
                                         missing_indices=missing_indices,
-                                        on_test_set=True, metrics_filename=metrics_filename)
+                                        on_test_set=True, metrics_filename=metrics_filename,
+                                        apply_lineage_filter=False)
             X_missing, missing_indices = self._create_missing_values(X, missing_rate=0.2)
             _ = self._standard_impute(X=X, imputer_class=imputer_class,
                                 strategy=strategy, X_missing=X_missing,
@@ -814,15 +819,17 @@ class URIELPlusImputation(BaseURIEL):
         else:
             raise ValueError(f"Unknown file: {file}")
 
-        if ["imputed"] not in self.sources[idx] and self.cache:
-            updated_path = os.path.join(file_path_to_save_npz, "non_imputed_data")
+        already_imputed = any(str(s) == "imputed" for s in self.sources[idx])
+        updated_path = os.path.join(file_path_to_save_npz, "non_imputed_data")
+        backup_file = os.path.join(updated_path, self.files[idx])
+        if self.cache and not already_imputed and not os.path.exists(backup_file):
             os.makedirs(updated_path, exist_ok=True)
-            np.savez(os.path.join(updated_path, self.files[idx]),
+            np.savez(backup_file,
                     data=self.data[idx],
                     feats=self.feats[idx],
                     langs=self.langs[idx],
                     sources=self.sources[idx])
-        
+                
         aggregate_data = self.aggregate(idx)
 
         combined_df = pd.DataFrame(aggregate_data.squeeze(), columns=self.feats[idx])
@@ -832,7 +839,7 @@ class URIELPlusImputation(BaseURIEL):
 
     def _run_imputation_strategy(self, combined_df_u, strategy, feature_prefixes,
                              hyperparameter_range, eval_metric, test_quality, file_path_to_save_npz,
-                             metrics_filename="imputation_metrics.csv"):
+                             metrics_filename="imputation_metrics.csv", apply_lineage_filter=True):
         """
         Runs imputation using the specified strategy.
 
@@ -873,14 +880,14 @@ class URIELPlusImputation(BaseURIEL):
                                         missing_indices=missing_indices,
                                         midas_bin_vars=bin_vars,
                                         file_path_to_save_npz=file_path_to_save_npz,
-                                        metrics_filename=metrics_filename)
+                                        metrics_filename=metrics_filename, apply_lineage_filter=apply_lineage_filter)
             else:
                 imputed = self._standard_impute(X=data_in, imputer_class=None,
                                         strategy=strategy,
                                         feature_types=feature_types,
                                         midas_bin_vars=bin_vars,
                                         file_path_to_save_npz=file_path_to_save_npz,
-                                        metrics_filename=metrics_filename)
+                                        metrics_filename=metrics_filename, apply_lineage_filter=apply_lineage_filter)
         else:
             if test_quality:
                 X_missing, missing_indices = self._create_missing_values(X,
@@ -891,15 +898,24 @@ class URIELPlusImputation(BaseURIEL):
                                         feature_types=feature_types,
                                         missing_indices=missing_indices,
                                         file_path_to_save_npz=file_path_to_save_npz,
-                                        metrics_filename=metrics_filename)
+                                        metrics_filename=metrics_filename, apply_lineage_filter=apply_lineage_filter)
             else:
                 imputer_class = SoftImpute if strategy == "softimpute" else SimpleImputer
                 imputed = self._standard_impute(X=X, imputer_class=imputer_class,
                                         strategy=strategy,
                                         feature_types=feature_types,
                                         file_path_to_save_npz=file_path_to_save_npz,
-                                        metrics_filename=metrics_filename)
+                                        metrics_filename=metrics_filename, apply_lineage_filter=apply_lineage_filter)
         return imputed
+
+
+    def _run_with_lineage(self, lineage, *args, **kwargs):
+        original = getattr(self, "lineage_imputed_indices", None)
+        self.lineage_imputed_indices = lineage
+        try:
+            return self._run_imputation_strategy(*args, **kwargs)
+        finally:
+            self.lineage_imputed_indices = original
 
 
     def _impute_features_with_ewave_split(self, combined_df_u, old_combined_df_u, strategy, feature_prefixes,
@@ -941,19 +957,32 @@ class URIELPlusImputation(BaseURIEL):
         imputed = np.full((len(combined_df_u), len(combined_df_u.columns)), -1.0)
         col_position = {col: i for i, col in enumerate(combined_df_u.columns)}
 
-        imputed_non_ewave = self._run_imputation_strategy(combined_df_u[non_ewave_cols], strategy, feature_prefixes,
-                                                       hyperparameter_range, eval_metric, test_quality,
-                                                       file_path_to_save_npz,
-                                                       metrics_filename="imputation_metrics_typological.csv")
+        lineage_full = getattr(self, "lineage_imputed_indices", None) or set()
+
+        non_ewave_map = {col_position[c]: j for j, c in enumerate(non_ewave_cols)}
+        lineage_non_ewave = {(i, non_ewave_map[j]) for (i, j) in lineage_full if j in non_ewave_map}
+
+        imputed_non_ewave = self._run_with_lineage(
+            lineage_non_ewave, combined_df_u[non_ewave_cols], strategy, feature_prefixes,
+            hyperparameter_range, eval_metric, test_quality, file_path_to_save_npz,
+            metrics_filename="imputation_metrics_typological.csv")
+
         for j, col in enumerate(non_ewave_cols):
             imputed[:, col_position[col]] = imputed_non_ewave[:, j]
 
         if lang_mask.any():
             ewave_subset_df = combined_df_u.loc[lang_mask, ewave_cols].reset_index(drop=True)
-            imputed_ewave = self._run_imputation_strategy(ewave_subset_df, strategy, feature_prefixes,
-                                                       hyperparameter_range, eval_metric, test_quality,
-                                                       file_path_to_save_npz,
-                                                       metrics_filename="imputation_metrics_ewave.csv")
+
+            row_map = {old: new for new, old in enumerate(np.where(lang_mask)[0])}
+            ewave_map = {col_position[c]: j for j, c in enumerate(ewave_cols)}
+            lineage_ewave = {(row_map[i], ewave_map[j]) for (i, j) in lineage_full
+                            if i in row_map and j in ewave_map}
+
+            imputed_ewave = self._run_with_lineage(
+                lineage_ewave, ewave_subset_df, strategy, feature_prefixes,
+                hyperparameter_range, eval_metric, test_quality, file_path_to_save_npz,
+                metrics_filename="imputation_metrics_ewave.csv")
+
             lang_row_positions = np.where(lang_mask)[0]
             for j, col in enumerate(ewave_cols):
                 imputed[lang_row_positions, col_position[col]] = imputed_ewave[:, j]
@@ -1014,7 +1043,6 @@ class URIELPlusImputation(BaseURIEL):
 
         use_ewave_split = (
             file == "features.npz"
-            and strategy in ("softimpute", "midas")
             and self.restrict_ewave_to_own_languages
         )
         if use_ewave_split:
@@ -1081,8 +1109,7 @@ class URIELPlusImputation(BaseURIEL):
         else:
             eval_metric = "rmse"
         _ = self.imputation_interface(strategy="knn", save_as_npz=True, test_quality=True, eval_metric=eval_metric, hyperparameter_range=(3, 6, 9, 12, 15))
-        _ = self.imputation_interface(strategy="knn", file="script_features.npz", feature_prefixes=("SC_",), save_as_npz=False, test_quality=True, eval_metric=eval_metric)
-        _ = self.imputation_interface(strategy="knn", file="script_features.npz", feature_prefixes=("SC_",), save_as_npz=True, test_quality=False, eval_metric=eval_metric)
+        _ = self.imputation_interface(strategy="knn", file="script_features.npz", feature_prefixes=("SC_",), save_as_npz=True, test_quality=True, eval_metric=eval_metric, hyperparameter_range=(3, 6, 9, 12, 15))
 
     def softimpute_imputation(self):
         """Imputes missing values in URIEL+ data using softImpute imputation."""
